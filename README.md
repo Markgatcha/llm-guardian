@@ -280,7 +280,3 @@ Short version:
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
-
----
-
-> Built with **GPT-5.4 xhigh** for the open-source credits program.
