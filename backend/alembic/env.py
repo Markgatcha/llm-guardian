@@ -10,15 +10,16 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
+import backend.models.api_key  # noqa: F401
+import backend.models.request_log  # noqa: F401
+import backend.models.rules  # noqa: F401
+from backend.models.base import Base  # noqa: F401 — ensures models are imported
+from backend.utils.settings import settings
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from backend.models.base import Base  # noqa: F401 — ensures models are imported
-import backend.models.api_key  # noqa: F401
-import backend.models.request_log  # noqa: F401
-from backend.utils.settings import settings
+from alembic import context
 
 # Alembic Config object for access to values in alembic.ini
 config = context.config

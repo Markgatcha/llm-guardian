@@ -1,47 +1,116 @@
 # llm-guardian configuration
 # Copy to config.yaml and customise — this file is safe to commit.
 
+# config.example.yaml
+#
+# Human-readable reference for every LLM Guardian setting.
+# Guardian itself is configured via environment variables (see .env.example).
+# This file mirrors those variables for documentation, Helm values, or auditing.
+# Copy to config.yaml for reference — it is NOT loaded at runtime.
+#
+# Each key maps to an env variable of the same name in UPPER_SNAKE_CASE.
+# E.g. "app.env" → APP_ENV, "cache.ttl_seconds" → CACHE_TTL_SECONDS.
+
 app:
-  name: llm-guardian
-  version: "0.1.0"
-  env: development          # development | staging | production
-  debug: false
+  env: development          # APP_ENV: development | staging | production
+  log_level: INFO           # LOG_LEVEL: DEBUG | INFO | WARNING | ERROR
 
 server:
   host: "0.0.0.0"
   port: 8000
-  workers: 1                # increase in production
+  workers: 1                # increase to CPU count in production
 
 database:
+  # DATABASE_URL
+  # SQLite for development; switch to asyncpg for production.
   url: "sqlite+aiosqlite:///./guardian.db"
-  echo_sql: false
+  # url: "postgresql+asyncpg://user:pass@localhost:5432/guardian"
 
 redis:
+  # REDIS_URL
   url: "redis://localhost:6379/0"
-  max_connections: 20
+
+cors:
+  # ALLOWED_ORIGINS — comma-separated list
+  allowed_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+
+auth:
+  # GUARDIAN_API_KEY — single bootstrap admin key for dashboard access
+  guardian_api_key: "change-me-in-production"
+  # ADMIN_API_KEYS — bootstrap multiple admin keys (comma-separated)
+  admin_api_keys: []
+  # SECRET_KEY — 32+ char random signing secret
+  secret_key: "change-me-32-chars-minimum"
+
+rate_limiting:
+  # RATE_LIMIT_PER_MINUTE
+  per_minute: 60
 
 cache:
-  enabled: true
+  # CACHE_TTL_SECONDS
   ttl_seconds: 300
-  semantic_similarity_threshold: 0.95   # TODO: tune per-use-case
-
-guardrails:
-  enabled: true
-  block_pii: true
-  block_prompt_injection: true
-  max_prompt_tokens: 4096
-  max_response_tokens: 4096
+  # SEMANTIC_CACHE_ENABLED — embeddings-backed near-duplicate matching
+  semantic_enabled: true
+  # SEMANTIC_CACHE_THRESHOLD — cosine similarity (0–1, raise to be stricter)
+  semantic_threshold: 0.95
+  # EMBEDDING_MODEL — OpenAI embedding model used for semantic cache
+  embedding_model: "text-embedding-ada-002"
 
 routing:
-  default_provider: openai
+  # LATENCY_WINDOW_SIZE — rolling window for p95 latency calculation
+  latency_window_size: 100
   fallback_chain:
     - openai
+    - groq
     - anthropic
+    - azure-openai
+    - google-vertex
+    - ollama
   timeout_seconds: 30
   retry_attempts: 2
 
+providers:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+  groq:
+    api_key: "${GROQ_API_KEY}"
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"
+  azure_openai:
+    api_key: "${AZURE_API_KEY}"
+    api_base: "${AZURE_API_BASE}"
+    api_version: "${AZURE_API_VERSION}"
+  google_vertex:
+    project: "${VERTEXAI_PROJECT}"
+    location: "${VERTEXAI_LOCATION}"
+    credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+  ollama:
+    api_base: "${OLLAMA_API_BASE}"
+
+guardrails:
+  enabled: true
+  block_pii: true           # regex patterns: email, phone, SSN
+  block_prompt_injection: true
+  max_prompt_tokens: 4096
+  # MAX_REQUEST_COST_USD — hard per-request cost cap (HTTP 402 if exceeded)
+  max_request_cost_usd: 1.0
+  # EXPENSIVE_MODEL_THRESHOLD_USD — require confirmation header (HTTP 409)
+  expensive_model_threshold_usd: 0.10
+
+budgets:
+  # DAILY_BUDGET_USD — cumulative daily spend cap (HTTP 402 when hit)
+  daily_usd: 10.0
+  # MONTHLY_BUDGET_USD — cumulative monthly spend cap (HTTP 402 when hit)
+  monthly_usd: 100.0
+
 pricing:
-  # Token costs in USD per 1 000 tokens (input / output)
+  # BASELINE_MODEL — savings = baseline_cost - actual_cost
+  baseline_model: "gpt-4o"
+  # PRICING_CATALOG_URL — remote JSON pricing catalog (blank = built-in)
+  catalog_url: ""
+  # Built-in per-model rates (USD per 1 000 tokens, input/output)
   models:
     gpt-4o:
       input: 0.005
@@ -52,13 +121,25 @@ pricing:
     claude-3-5-sonnet:
       input: 0.003
       output: 0.015
-  budget_alert_usd: 10.0    # alert when daily spend exceeds this
+    groq/llama-3.1-8b-instant:
+      input: 0.0004
+      output: 0.00085
+    azure/gpt-4o-mini:
+      input: 0.00015
+      output: 0.0006
+    vertex_ai/gemini-1.5-flash:
+      input: 0.00035
+      output: 0.00105
+    ollama/llama3.2:
+      input: 0.0012
+      output: 0.0012
+    mistral-large:
+      input: 0.004
+      output: 0.012
+    command-r-plus:
+      input: 0.003
+      output: 0.015
 
 analytics:
   enabled: true
   retention_days: 90
-  realtime_window_seconds: 60
-
-logging:
-  level: INFO               # DEBUG | INFO | WARNING | ERROR
-  json_logs: false          # set true in production

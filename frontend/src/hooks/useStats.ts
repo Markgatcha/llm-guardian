@@ -1,49 +1,51 @@
-/**
- * useStats — fetches the /api/v1/stats/summary endpoint.
- *
- * TODO: add polling interval / SWR-style revalidation.
- * TODO: replace with a proper API client module.
- */
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { api } from "@/lib/api";
+import type { CostsResponse, ModelStat, ProviderStat, StatsSummary } from "@/lib/types";
 
-interface StatsSummary {
-  total_requests: number;
-  total_cost_usd: number;
-  avg_latency_ms: number;
+interface StatsBundle {
+  summary: StatsSummary;
+  models: ModelStat[];
+  providers: ProviderStat[];
+  costs: CostsResponse;
 }
 
-interface UseStatsResult {
-  data: StatsSummary | null;
+export interface UseStatsResult {
+  summary: StatsSummary | null;
+  models: ModelStat[];
+  providers: ProviderStat[];
+  costs: CostsResponse | null;
   loading: boolean;
   error: string | null;
+  refetch: () => Promise<void>;
 }
 
 export function useStats(): UseStatsResult {
-  const [data, setData] = useState<StatsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const fetcher = useCallback(async (): Promise<StatsBundle> => {
+    const [summary, modelsResponse, providersResponse, costs] = await Promise.all([
+      api.stats.summary(),
+      api.stats.models(),
+      api.stats.providers(),
+      api.stats.costs(),
+    ]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchStats() {
-      try {
-        const res = await fetch("/api/v1/stats/summary");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as StatsSummary;
-        if (!cancelled) setData(json);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void fetchStats();
-    return () => {
-      cancelled = true;
+    return {
+      summary,
+      models: modelsResponse.models,
+      providers: providersResponse.providers,
+      costs,
     };
   }, []);
 
-  return { data, loading, error };
+  const { data, loading, error, refetch } = useApiQuery(fetcher, []);
+
+  return {
+    summary: data?.summary ?? null,
+    models: data?.models ?? [],
+    providers: data?.providers ?? [],
+    costs: data?.costs ?? null,
+    loading,
+    error,
+    refetch,
+  };
 }

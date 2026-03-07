@@ -1,14 +1,27 @@
-/** Simple 404 fallback page. */
+import { Compass } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/Card";
+import { Button } from "@/components/ui";
+
 export default function NotFoundPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-6xl font-bold text-brand-500 mb-4">404</h1>
-        <p className="text-slate-400">Page not found.</p>
-        <a href="/" className="mt-6 inline-block underline text-brand-500">
-          Go home
-        </a>
-      </div>
-    </main>
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Card className="max-w-lg text-center">
+        <CardHeader>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-500/20 bg-brand-500/10 text-brand-100">
+            <Compass className="h-6 w-6" />
+          </div>
+          <CardTitle className="mt-4 text-3xl">Page not found</CardTitle>
+          <CardDescription>
+            The page you requested does not exist in the dashboard. Head back to the overview to keep working.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link to="/">
+            <Button>Return to overview</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -23,6 +23,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # ── Redis Stack (cache + streams) ────────────────────────────────────────
   redis:
@@ -31,7 +32,7 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-      - "8001:8001"      # RedisInsight UI
+      - "8001:8001"      # RedisInsight UI → http://localhost:8001
     volumes:
       - redis-data:/data
     healthcheck:
@@ -40,7 +41,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Frontend (dev mode) ──────────────────────────────────────────────────
+  # ── Frontend (Vite dev server with hot-reload) ────────────────────────────
+  # The Vite proxy forwards /api requests to the api service inside the
+  # Docker network (http://api:8000).  Your browser still reaches the
+  # frontend at http://localhost:5173 and the API at http://localhost:8000.
   frontend:
     image: node:20-alpine
     container_name: guardian-frontend
@@ -52,7 +56,11 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_URL: "http://localhost:8000"
+      # Used by vite.config.ts as the server-side proxy target.
+      # Must use the Docker service name, not localhost.
+      VITE_API_URL: "http://api:8000"
+    depends_on:
+      - api
 
 volumes:
   guardian-data:

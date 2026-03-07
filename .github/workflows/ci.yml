@@ -21,7 +21,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install ruff mypy
+      # Install project + dev extras so mypy can resolve all imports.
+      - run: pip install -e ".[dev]"
       - run: ruff check backend tests/backend
       - run: mypy backend --ignore-missing-imports
 
@@ -49,6 +50,8 @@ jobs:
           DATABASE_URL: "sqlite+aiosqlite:///./test.db"
           REDIS_URL: "redis://localhost:6379/0"
           APP_ENV: "testing"
+          GUARDIAN_API_KEY: "ci-test-key"
+          SECRET_KEY: "ci-test-secret-key-32-chars-xxxx"
         run: pytest tests/backend -v --tb=short
 
   # ── Frontend ───────────────────────────────────────────────────────────────
@@ -100,3 +103,15 @@ jobs:
           tags: llm-guardian:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── Validate config YAML ───────────────────────────────────────────────────
+  config-yaml:
+    name: Config – YAML parse check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Parse config.example.yaml
+        run: python -c "import yaml, sys; yaml.safe_load(open('config.example.yaml'))" && echo "✅ config.example.yaml is valid YAML"
