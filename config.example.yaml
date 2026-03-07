@@ -1,0 +1,64 @@
+# llm-guardian configuration
+# Copy to config.yaml and customise — this file is safe to commit.
+
+app:
+  name: llm-guardian
+  version: "0.1.0"
+  env: development          # development | staging | production
+  debug: false
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1                # increase in production
+
+database:
+  url: "sqlite+aiosqlite:///./guardian.db"
+  echo_sql: false
+
+redis:
+  url: "redis://localhost:6379/0"
+  max_connections: 20
+
+cache:
+  enabled: true
+  ttl_seconds: 300
+  semantic_similarity_threshold: 0.95   # TODO: tune per-use-case
+
+guardrails:
+  enabled: true
+  block_pii: true
+  block_prompt_injection: true
+  max_prompt_tokens: 4096
+  max_response_tokens: 4096
+
+routing:
+  default_provider: openai
+  fallback_chain:
+    - openai
+    - anthropic
+  timeout_seconds: 30
+  retry_attempts: 2
+
+pricing:
+  # Token costs in USD per 1 000 tokens (input / output)
+  models:
+    gpt-4o:
+      input: 0.005
+      output: 0.015
+    gpt-4o-mini:
+      input: 0.00015
+      output: 0.0006
+    claude-3-5-sonnet:
+      input: 0.003
+      output: 0.015
+  budget_alert_usd: 10.0    # alert when daily spend exceeds this
+
+analytics:
+  enabled: true
+  retention_days: 90
+  realtime_window_seconds: 60
+
+logging:
+  level: INFO               # DEBUG | INFO | WARNING | ERROR
+  json_logs: false          # set true in production

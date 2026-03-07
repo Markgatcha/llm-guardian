@@ -1,0 +1,59 @@
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: guardian-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:////data/guardian.db"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      - guardian-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Redis Stack (cache + streams) ────────────────────────────────────────
+  redis:
+    image: redis/redis-stack:latest
+    container_name: guardian-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+      - "8001:8001"      # RedisInsight UI
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend (dev mode) ──────────────────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    container_name: guardian-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: "http://localhost:8000"
+
+volumes:
+  guardian-data:
+  redis-data:
