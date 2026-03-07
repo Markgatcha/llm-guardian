@@ -267,6 +267,7 @@ llm-guardian/
 ## 🤝 Contributing
 
 See [docs/contributing.md](docs/contributing.md) for guidelines on setting up a dev environment, writing tests, and submitting pull requests.
+Please also review the project's [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 
 Short version:
 1. Fork → feature branch → PR against `main`

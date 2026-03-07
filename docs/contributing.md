@@ -12,6 +12,7 @@ Thank you for helping make LLM Guardian better! This guide covers everything you
 - [Frontend development](#frontend-development)
 - [Running tests](#running-tests)
 - [Code style](#code-style)
+- [Code of conduct](#code-of-conduct)
 - [Submitting a pull request](#submitting-a-pull-request)
 
 ---
@@ -195,6 +196,17 @@ fix: correct daily budget reset logic
 docs: update architecture endpoint table
 chore: bump litellm to 1.41.0
 ```
+
+---
+
+## Code of Conduct
+
+By participating in this project, you agree to follow the repository
+[Code of Conduct](../CODE_OF_CONDUCT.md).
+
+Please keep discussions respectful, constructive, and focused on moving the project
+forward. If you need to report a concern, do so through a private maintainer contact
+channel rather than a public issue whenever possible.
 
 ---
 
