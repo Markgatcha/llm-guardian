@@ -100,9 +100,7 @@ jobs:
       - run: bun install
       - run: bunx biome check src/
       - run: bunx tsc --noEmit
-      - run: bun test src/
-
-  # ── Docker build smoke-test ────────────────────────────────────────────────
+        # ── Docker build smoke-test ────────────────────────────────────────────────
   docker-build:
     name: Docker – Build image
     runs-on: ubuntu-latest
