@@ -10,6 +10,8 @@ import type {
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 500;
 
 let apiKey = process.env.OPENROUTER_API_KEY || "";
 let baseUrl = OPENROUTER_BASE_URL;
@@ -17,6 +19,36 @@ let baseUrl = OPENROUTER_BASE_URL;
 export function configure(opts: { apiKey?: string; baseUrl?: string }): void {
 	if (opts.apiKey) apiKey = opts.apiKey;
 	if (opts.baseUrl) baseUrl = opts.baseUrl;
+}
+
+// ─── Retry Helper ────────────────────────────────────────────────────────────
+
+async function fetchWithRetry(
+	url: string,
+	init: RequestInit,
+	retries = MAX_RETRIES,
+): Promise<Response> {
+	let lastError: Error | undefined;
+	for (let attempt = 0; attempt < retries; attempt++) {
+		try {
+			const response = await fetch(url, init);
+			if (
+				response.ok ||
+				(response.status >= 400 &&
+					response.status < 500 &&
+					response.status !== 429)
+			) {
+				return response;
+			}
+			// 429 or 5xx — retry
+			lastError = new Error(`HTTP ${response.status}`);
+		} catch (err) {
+			lastError = err instanceof Error ? err : new Error(String(err));
+		}
+		const delay = BASE_DELAY_MS * 2 ** attempt;
+		await new Promise((r) => setTimeout(r, delay));
+	}
+	throw lastError ?? new Error("fetchWithRetry: all retries exhausted");
 }
 
 // ─── Model Selection ─────────────────────────────────────────────────────────
@@ -99,7 +131,7 @@ export async function complete(
 	if (request.stream !== undefined) body.stream = request.stream;
 	if (request.tools !== undefined) body.tools = request.tools;
 
-	const response = await fetch(`${baseUrl}/chat/completions`, {
+	const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -171,7 +203,7 @@ export async function* completeStream(
 	if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens;
 	if (request.tools !== undefined) body.tools = request.tools;
 
-	const response = await fetch(`${baseUrl}/chat/completions`, {
+	const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -198,16 +230,21 @@ export async function* completeStream(
 		totalTokens: 0,
 	};
 	let model = request.model;
+	let buffer = "";
 
-	const _buffer = "";
 	while (true) {
 		const { done, value } = await reader.read();
 		if (done) break;
 
-		const chunk = decoder.decode(value, { stream: true });
-		const lines = chunk.split("\n");
+		// Append chunk to buffer — handles split SSE frames across chunks
+		buffer += decoder.decode(value, { stream: true });
 
-		for (const line of lines) {
+		// Process complete SSE lines from buffer
+		let newlineIdx = buffer.indexOf("\n");
+		while (newlineIdx !== -1) {
+			const line = buffer.slice(0, newlineIdx).trim();
+			buffer = buffer.slice(newlineIdx + 1);
+
 			if (!line.startsWith("data: ")) continue;
 			const data = line.slice(6).trim();
 			if (data === "[DONE]") continue;
@@ -233,6 +270,27 @@ export async function* completeStream(
 				}
 			} catch {
 				// Skip malformed chunks
+			}
+			newlineIdx = buffer.indexOf("\n");
+		}
+	}
+
+	// Flush any remaining buffered content
+	if (buffer.trim()) {
+		for (const line of buffer.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed.startsWith("data: ")) continue;
+			const data = trimmed.slice(6).trim();
+			if (data === "[DONE]") continue;
+			try {
+				const parsed = JSON.parse(data);
+				const content = parsed.choices?.[0]?.delta?.content || "";
+				if (content) {
+					fullContent += content;
+					yield content;
+				}
+			} catch {
+				// Skip malformed
 			}
 		}
 	}

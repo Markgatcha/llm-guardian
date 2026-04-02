@@ -34,7 +34,8 @@ const PII_PATTERNS: PIIPattern[] = [
 	},
 	{
 		type: "ip_address",
-		pattern: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
+		pattern:
+			/(?<![.\w-])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![.\w-])/g,
 		redactChar: "[IP_REDACTED]",
 	},
 ];
@@ -58,9 +59,9 @@ const INJECTION_PATTERNS: RegExp[] = [
 
 export function scanPII(text: string): PrivacyScanResult {
 	const piiDetected: PIIMatch[] = [];
-	const sanitized = text;
+	let sanitized = text;
 
-	// Scan for PII
+	// Scan for PII and build redacted copy
 	for (const { type, pattern, redactChar } of PII_PATTERNS) {
 		const regex = new RegExp(pattern.source, pattern.flags);
 		let match = regex.exec(text);
@@ -74,6 +75,11 @@ export function scanPII(text: string): PrivacyScanResult {
 			});
 			match = regex.exec(text);
 		}
+		// Apply redaction to the sanitized string
+		sanitized = sanitized.replace(
+			new RegExp(pattern.source, pattern.flags),
+			redactChar,
+		);
 	}
 
 	// Check for prompt injection

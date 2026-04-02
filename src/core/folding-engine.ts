@@ -80,6 +80,16 @@ const ENTITY_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
 		pattern: /\b\d+(?:\.\d+)?(?:%|ms|s|tok|tokens|usd|\$)\b/gi,
 	},
 	{ type: "code_ref", pattern: /`[^`]+`/g },
+	{ type: "hex_color", pattern: /#(?:[0-9a-fA-F]{3}){1,2}\b/g },
+	{
+		type: "css_value",
+		pattern: /(?:rgb|rgba|hsl|hsla)\s*\([^)]+\)/g,
+	},
+	{
+		type: "config_number",
+		pattern:
+			/(?:timeout|max|min|port|size|limit|threshold|interval|delay|retries|workers|threads)\s*[:=]\s*\d+(?:\.\d+)?/gi,
+	},
 ];
 
 function extractEntities(text: string): string[] {
@@ -88,7 +98,7 @@ function extractEntities(text: string): string[] {
 		const regex = new RegExp(pattern.source, pattern.flags);
 		let match = regex.exec(text);
 		while (match !== null) {
-			entities.add(match[0].toLowerCase());
+			entities.add(match[0]);
 			match = regex.exec(text);
 		}
 	}

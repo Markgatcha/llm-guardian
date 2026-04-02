@@ -5,7 +5,11 @@
 import { checkBudget, recordSpend } from "../gateway/budget-manager.ts";
 import { sanitizeText, scanPII } from "../gateway/privacy-shield.ts";
 import { getModelFingerprint } from "../providers/fingerprints.ts";
-import { complete, selectModel } from "../providers/openrouter-adapter.ts";
+import {
+	complete,
+	completeStream,
+	selectModel,
+} from "../providers/openrouter-adapter.ts";
 import { estimateTokens, foldMessages } from "./folding-engine.ts";
 import { fuseToolMessages } from "./tool-fuser.ts";
 import type {
@@ -279,17 +283,24 @@ export async function* orchestrateStream(
 
 	let fullContent = "";
 
-	// For now, collect full response (real streaming would use SSE)
-	const response = await complete({
+	// Stream chunks from the provider via completeStream() generator
+	const stream = completeStream({
 		model: selectedModel,
 		messages: workingMessages,
 		temperature: request.temperature,
 		maxTokens: request.maxTokens,
-		stream: false,
+		stream: true,
 	});
 
-	fullContent = response.content;
-	yield fullContent;
+	let result = await stream.next();
+	while (!result.done) {
+		fullContent += result.value;
+		yield result.value;
+		result = await stream.next();
+	}
+
+	// result.value is CompletionResponse from the generator's return
+	const response = result.value;
 
 	const latencyMs = performance.now() - startTime;
 	const actualCost = calculateCost(

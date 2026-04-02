@@ -294,6 +294,30 @@ register({
 	supportsToolUse: true,
 });
 
+// ── Qwen ─────────────────────────────────────────────────────────────────────
+const QWEN_BIAS: AttentionBias = {
+	systemPrompt: 0.85,
+	userFirstParagraph: 0.85,
+	userMiddleSection: 0.65,
+	userLastParagraph: 0.9,
+	examples: 0.85,
+	toolDefinitions: 0.8,
+};
+
+register({
+	modelName: "qwen/qwen3.6-plus",
+	provider: "qwen",
+	attentionBiases: QWEN_BIAS,
+	optimalStructure: DEFAULT_STRUCTURE,
+	contextWindow: 128_000,
+	maxOutputTokens: 8_192,
+	inputCostPerMillion: 0.8,
+	outputCostPerMillion: 2.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
 // ── Budget Models (MiniMax-class for VCM routing) ────────────────────────────
 register({
 	modelName: "minimax/m2.7",

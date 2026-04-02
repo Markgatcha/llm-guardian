@@ -88,6 +88,20 @@ jobs:
       - run: npm ci
       - run: npm test -- --run
 
+  # ── Core Engine (Bun/TypeScript) ───────────────────────────────────────────
+  core-test:
+    name: Core – Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx biome check src/
+      - run: bunx tsc --noEmit
+      - run: bun test
+
   # ── Docker build smoke-test ────────────────────────────────────────────────
   docker-build:
     name: Docker – Build image

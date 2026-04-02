@@ -3,6 +3,18 @@
   "version": "1.0.0",
   "description": "Central Nervous System of the AI Trio — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding",
   "type": "module",
+  "main": "src/core/orchestrator.ts",
+  "module": "src/core/orchestrator.ts",
+  "types": "src/core/types.ts",
+  "bin": {
+    "guardian": "src/cli/index.ts"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE",
+    "config.example.yaml"
+  ],
   "scripts": {
     "start": "bun run src/cli/index.ts --start",
     "dashboard": "bun run src/cli/index.ts --dash",
