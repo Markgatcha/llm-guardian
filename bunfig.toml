@@ -1,6 +1,6 @@
 [install]
 peer = false
-optional = false
+optional = true
 
 [test]
 preload = ["./src/core/types.ts"]
