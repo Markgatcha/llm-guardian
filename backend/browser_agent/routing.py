@@ -4,7 +4,12 @@ backend.browser_agent.routing — Complexity scoring for local vs. remote browse
 
 from __future__ import annotations
 
-from backend.browser_agent.models import BrowserTaskProfile, ModelRouteDecision, RoutingTier, SideEffectRisk
+from backend.browser_agent.models import (
+    BrowserTaskProfile,
+    ModelRouteDecision,
+    RoutingTier,
+    SideEffectRisk,
+)
 from backend.utils.settings import settings
 
 
