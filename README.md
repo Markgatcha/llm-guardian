@@ -1,13 +1,11 @@
 # LLM-Guardian V1.0.0
 
-[![npm version](https://img.shields.io/npm/v/llm-guardian.svg)](https://www.npmjs.com/package/llm-guardian)
-[![npm downloads](https://img.shields.io/npm/dm/llm-guardian.svg)](https://www.npmjs.com/package/llm-guardian)
+[![npm version](https://img.shields.io/badge/npm-coming%20soon-lightgrey?logo=npm)](https://www.npmjs.com/package/llm-guardian)
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Glama](https://glama.ai/mcp/servers/badge)](https://glama.ai/mcp/servers?q=llm-guardian)
+[![Glama](https://img.shields.io/badge/Glama-coming%20soon-lightgrey)](https://glama.ai)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
-
 **Central Nervous System of the AI Trio** — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding.
 
 > Part of the **AI Trio**: [Mem-OS](https://github.com/anomalyco/mem-os) (Memory) · [Universal-MCP-Toolkit](https://github.com/anomalyco/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
