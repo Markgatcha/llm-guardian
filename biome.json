@@ -1,20 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "organizeImports": {
-    "enabled": true
+    "enabled": false
   },
   "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "trailingCommas": "all",
-      "semicolons": "always"
-    }
+    "enabled": false
   },
   "linter": {
     "enabled": true,
@@ -22,10 +12,17 @@
       "recommended": true,
       "style": {
         "useNumberNamespace": "off",
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "useConst": "warn",
+        "noUnusedTemplateLiteral": "off"
       },
       "suspicious": {
-        "noExplicitAny": "warn"
+        "noExplicitAny": "warn",
+        "noConsoleLog": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "warn",
+        "noUnusedImports": "warn"
       }
     }
   },
@@ -34,7 +31,8 @@
       "src/dashboard/",
       "node_modules/",
       "dist/",
-      "build/"
+      "build/",
+      "bun.lock"
     ]
   }
 }
