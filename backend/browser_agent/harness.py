@@ -8,7 +8,11 @@ import asyncio
 import json
 from pathlib import Path
 
-from backend.browser_agent.models import BrowserActionKind, HarnessExecutionRequest, HarnessExecutionResult
+from backend.browser_agent.models import (
+    BrowserActionKind,
+    HarnessExecutionRequest,
+    HarnessExecutionResult,
+)
 from backend.utils.settings import settings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
