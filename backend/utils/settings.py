@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     mistral_api_key: str = Field("", alias="MISTRAL_API_KEY")
     cohere_api_key: str = Field("", alias="COHERE_API_KEY")
 
+    browser_local_provider: str = Field("ollama", alias="BROWSER_LOCAL_PROVIDER")
+    browser_local_model: str = Field("qwen2.5:7b-instruct", alias="BROWSER_LOCAL_MODEL")
+    browser_remote_provider: str = Field("gemini-free", alias="BROWSER_REMOTE_PROVIDER")
+    browser_remote_model: str = Field("gemini-2.0-flash", alias="BROWSER_REMOTE_MODEL")
+    browser_cua_model: str = Field("gpt-5.4", alias="BROWSER_CUA_MODEL")
+    browser_node_executable: str = Field("node", alias="BROWSER_NODE_EXECUTABLE")
+    browser_harness_script: str = Field(
+        r"frontend\browser-harness\playwright_harness.mjs",
+        alias="BROWSER_HARNESS_SCRIPT",
+    )
+
     @field_validator("allowed_origins", "admin_api_keys", mode="before")
     @classmethod
     def _validate_string_lists(cls, value: object) -> list[str]:

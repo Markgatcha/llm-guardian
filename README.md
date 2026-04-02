@@ -1,282 +1,210 @@
-# 🛡️ LLM Guardian
+# LLM-Guardian V1.0.0
 
-<p align="center">
-  <strong>Self-hosted LLM API gateway with smart routing, response caching, guardrails, cost tracking, and a real-time analytics dashboard.</strong>
-</p>
+**Central Nervous System of the AI Trio** — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding.
 
-<p align="center">
-  <a href="https://github.com/your-org/llm-guardian/actions/workflows/ci.yml">
-    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/your-org/llm-guardian/ci.yml?branch=main&label=CI&logo=github">
-  </a>
-  <a href="LICENSE">
-    <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
-  </a>
-  <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white">
-  <img alt="Docker" src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white">
-  <a href="https://github.com/your-org/llm-guardian/stargazers">
-    <img alt="Stars" src="https://img.shields.io/github/stars/your-org/llm-guardian?style=social">
-  </a>
-</p>
+> Part of the **AI Trio**: [Mem-OS](https://github.com/anomalyco/mem-os) (Memory) · [Universal-MCP-Toolkit](https://github.com/anomalyco/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
 
 ---
 
-Drop LLM Guardian in front of your applications and **swap `base_url`** — you get:
+## What It Does
 
-- 🔀 **Smart routing** across OpenAI, Groq, Anthropic, Azure OpenAI, Google Vertex, and local Ollama
-- ⚡ **Response caching** (exact-match via Redis) that eliminates repeat LLM calls
-- 🔒 **Guardrails** — PII detection, prompt-injection blocking, per-request and daily/monthly budget enforcement
-- 💰 **Cost tracking** with per-model pricing, savings vs. baseline, and trend charts
-- 📊 **Admin dashboard** — React SPA with logs, API-key management, routing rules, and provider catalog
-- 🔑 **API key management** — create, rotate, and deactivate admin keys
+LLM-Guardian sits between your application and LLM providers, compressing prompts by 80-95% while preserving semantic quality.
 
-> 🚧 **Active development.** Core gateway, streaming, semantic caching, and dashboard flows are functional; richer timeseries analytics and multi-tenancy are on the roadmap.
-
----
-
-## 📸 Screenshots
-
-| Overview dashboard | Request logs | Provider catalog |
-|---|---|---|
-| *(metrics, cost charts, cache-hit rate)* | *(filterable log viewer with cost per call)* | *(pricing table and p95 latency by model)* |
-
-> Screenshots will be added once the UI stabilises. Run locally to see the live dashboard.
+| Feature | Description |
+|---|---|
+| **Semantic Folding (EDH)** | Converts verbose text into entity-dense headlinese: `[ACTION:Refactor][TARGET:VCM]` |
+| **VCM Sharding** | Builds context skeletons and injects only high-relevance knowledge shards |
+| **Cross-Model Fingerprinting** | Re-orders prompt components per model's attention biases (Claude 4.6, Gemini 3.1, GPT-5.2) |
+| **Tool Fusion** | Compresses multiple MCP tool-turns into a single semantic block |
+| **Privacy Shield** | PII redaction + prompt injection blocking (sub-millisecond) |
+| **Budget Enforcement** | Per-request, daily, and monthly cost limits |
+| **Smart Routing** | Selects cheapest capable model via OpenRouter |
 
 ---
 
-## ⚡ Quick Start
-
-### One command (Docker Compose)
+## Quick Start
 
 ```bash
-git clone https://github.com/your-org/llm-guardian.git
+# Clone & install
+git clone https://github.com/anomalyco/llm-guardian.git
 cd llm-guardian
-cp .env.example .env          # fill in at least OPENAI_API_KEY + GUARDIAN_API_KEY
-docker compose up --build
-```
+bun install
 
-| Service | URL |
-|---|---|
-| Backend API + Swagger | http://localhost:8000/docs |
-| Frontend dashboard | http://localhost:5173 |
-| RedisInsight | http://localhost:8001 |
+# Configure
+export OPENROUTER_API_KEY="sk-or-..."
 
-### GitHub Codespaces / devcontainer
+# Start the Guardian API server
+bun run start
 
-Click **"Open in Codespaces"** (or use the **Dev Containers** VS Code extension):
-
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/your-org/llm-guardian)
-
-The devcontainer starts the full stack automatically. Open `http://localhost:5173` once the ports forward.
-
----
-
-## 🔌 OpenAI SDK — one-line integration
-
-LLM Guardian exposes an **OpenAI-compatible `/v1` API**. Change only `base_url` and `api_key`:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8000/v1",   # point at Guardian
-    api_key="your-guardian-api-key",       # GUARDIAN_API_KEY from .env
-)
-
-response = client.chat.completions.create(
-    model="gpt-4o",          # Guardian selects the cheapest capable model
-    messages=[{"role": "user", "content": "Summarise the quarterly report."}],
-)
-print(response.choices[0].message.content)
-```
-
-**Response headers added by Guardian:**
-
-| Header | Meaning |
-|---|---|
-| `X-Guardian-Model` | Model actually used |
-| `X-Guardian-Estimated-Cost-Usd` | Pre-call cost estimate |
-| `X-Guardian-Actual-Cost-Usd` | Post-call actual cost |
-| `X-Guardian-Cache` | `hit` or `miss` |
-
-**Cost preview** (no LLM call made):
-
-```python
-client.chat.completions.create(
-    ...,
-    extra_headers={"X-Guardian-Preview-Only": "1"},
-)
-# Returns HTTP 200 with cost estimate, no tokens consumed
+# Or with options
+bun run src/cli/index.ts start --port 3000 --daily-budget 50 --monthly-budget 500
 ```
 
 ---
 
-## 🏗️ Architecture
+## Usage
+
+### OpenAI-Compatible Proxy
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/v1",
+  apiKey: "sk-or-...",
+});
+
+const response = await client.chat.completions.create({
+  model: "auto",  // Guardian picks the cheapest model
+  messages: [{ role: "user", content: "Explain semantic folding" }],
+});
+```
+
+### Standalone Folding
+
+```bash
+bun run src/cli/index.ts optimize "Your long text here..." --max-tokens 50
+```
+
+```typescript
+import { foldText } from "./src/core/folding-engine";
+
+const result = foldText(longText, { maxTokens: 200 });
+console.log(result.metadata.compressionRatio); // e.g. 0.08 (92% reduction)
+console.log(result.foldedPrompt);               // Entity-dense headlinese
+```
+
+---
+
+## Architecture
 
 ```
-Browser / API client
-        │
-        ▼  POST /v1/chat/completions  (OpenAI-compatible proxy)
-┌──────────────────────────────────────────────────────────┐
-│                    FastAPI Gateway                        │
+Client Request
+      │
+      ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Guardian Orchestrator                     │
 │                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              Guardrails Engine                   │   │
-│  │   PII regex · prompt-injection · budget checks   │   │
-│  └───────────────────────┬──────────────────────────┘   │
-│                          │ pass                          │
-│  ┌───────────────────────▼──────────────────────────┐   │
-│  │              Response Cache (Redis)               │   │
-│  │   exact-match SHA-256 · semantic embeddings       │   │
-│  └─────────┬─────────────────────────────┬──────────┘   │
-│         miss│                         hit │              │
-│  ┌──────────▼──────────┐          ◄───────┘              │
-│  │     LLM Router      │  (LiteLLM)                     │
-│  │  openai · groq      │  cost-optimised selection      │
-│  │  anthropic · azure  │  + configurable fallback chain │
-│  │  vertex · ollama    │                                │
-│  └──────────┬──────────┘                                │
-│             │                                            │
-│  ┌──────────▼──────────────────────────────────────┐   │
-│  │          Pricing & Analytics                     │   │
-│  │  token cost calc · event persistence · savings   │   │
-│  └──────────┬──────────────────────────────────────┘   │
-└─────────────┼────────────────────────────────────────────┘
-              │
-   ┌──────────▼──────────┐
-   │   SQLite / PostgreSQL│  (SQLAlchemy + Alembic)
-   └─────────────────────┘
-
-Admin dashboard  ←→  GET/POST /api/v1/{stats,keys,rules,logs,providers}
-```
-
-### Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.12, FastAPI, Uvicorn, LiteLLM |
-| Cache | Redis Stack (exact-match + semantic cache embeddings) |
-| Database | SQLite (dev) → PostgreSQL (prod) via SQLAlchemy + Alembic |
-| Frontend | React 19, Vite, TypeScript, Tailwind CSS, Recharts |
-| Testing | pytest + httpx · Vitest + React Testing Library |
-| CI | GitHub Actions |
-
----
-
-## 🐳 Docker Setup
-
-### Full stack (recommended for local dev)
-
-```bash
-cp .env.example .env    # edit API keys and GUARDIAN_API_KEY
-docker compose up --build
-```
-
-The compose file starts:
-- **`api`** — FastAPI backend on port 8000
-- **`redis`** — Redis Stack on port 6379 (RedisInsight on 8001)
-- **`frontend`** — Vite dev server on port 5173 (hot-reload, proxies `/api` to the backend)
-
-### Backend-only (fastest iteration)
-
-```bash
-python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn backend.main:app --reload
-```
-
-### Frontend-only (separate terminal)
-
-```bash
-cd frontend
-npm install
-npm run dev
-# Dashboard at http://localhost:5173
-# Expects backend at http://localhost:8000 (change VITE_API_URL to override)
+│  1. Privacy Shield    → PII redaction + injection block  │
+│  2. Tool Fusion       → Multi-turn MCP output compression│
+│  3. Semantic Folding  → EDH entity-dense distillation    │
+│  4. VCM Sharding      → Context skeleton + relevance cut │
+│  5. Budget Check      → Per-request / daily / monthly    │
+│  6. Model Selection   → Cheapest capable via fingerprint │
+│  7. OpenRouter Call   → Unified API adapter              │
+│  8. Analytics         → Cost, latency, compression logs  │
+└─────────────────────────────────────────────────────────┘
+      │
+      ▼
+   Response + Optimization Metrics
 ```
 
 ---
 
-## ⚙️ Configuration
+## File Structure
 
-All settings are controlled via environment variables (`.env` file). See [`.env.example`](.env.example) for the full list with descriptions.
-
-The [`config.example.yaml`](config.example.yaml) mirrors every variable as a YAML reference — useful for documentation, Helm values, or manual auditing.
-
-### Minimum required
-
-```env
-OPENAI_API_KEY=sk-...          # at least one LLM provider key
-GUARDIAN_API_KEY=change-me     # admin key for the dashboard
-SECRET_KEY=change-me-32-chars  # signing secret (32+ chars)
+```
+src/
+  core/
+    orchestrator.ts      # The Brain — coordinates all subsystems
+    folding-engine.ts    # EDH: text → entity-dense headlinese
+    vcm-sharder.ts       # Context skeleton + relevance sharding
+    tool-fuser.ts        # MCP tool output compression
+    types.ts             # TypeScript interfaces
+  gateway/
+    privacy-shield.ts    # PII scrubbing + injection detection
+    budget-manager.ts    # Cost enforcement (request/daily/monthly)
+  providers/
+    fingerprints.ts      # Model attention bias profiles (2026 models)
+    openrouter-adapter.ts # Unified API connector
+  cli/
+    index.ts             # Commands: --start, --dash, --optimize
+  examples/
+    folding-magic.ts     # Demo: 1k words → ~50 tokens
+    mcp-handshake.ts     # Demo: MCP tool fusion
+  dashboard/             # React 19 analytics dashboard
+    App.tsx
+    pages/
+      OverviewPage.tsx   # Cost, latency, savings overview
+      CompressionPage.tsx # Real-time compression analytics
+      SavingsPage.tsx    # USD saved vs raw input
+      ProvidersPage.tsx  # Model catalog with pricing
+      LogsPage.tsx       # Request logs with pagination
 ```
 
-### Key optional settings
+---
 
-| Variable | Default | Description |
+## Dashboard
+
+The analytics dashboard provides real-time visibility into:
+
+- **Overview** — total requests, cost, latency, tokens saved
+- **Compression** — per-request folding ratios, model breakdown
+- **USD Savings** — actual vs. baseline cost over time
+- **Providers** — full model catalog with pricing
+- **Logs** — paginated request log with cost attribution
+
+```bash
+# Build and serve the dashboard
+cd src/dashboard && bun install && bun run build
+bun run src/cli/index.ts dash --port 5173
+```
+
+---
+
+## The AI Trio
+
+| Component | Role | Status |
 |---|---|---|
-| `DATABASE_URL` | SQLite (dev) | Use `postgresql+asyncpg://...` in production |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
-| `DAILY_BUDGET_USD` | `10.0` | Hard daily spend cap (returns 402 when exceeded) |
-| `MONTHLY_BUDGET_USD` | `100.0` | Hard monthly spend cap |
-| `CACHE_TTL_SECONDS` | `300` | Cached response lifetime |
-| `SEMANTIC_CACHE_ENABLED` | `true` | Enable embedding-based cache lookup over recent prompts |
-| `ALLOWED_ORIGINS` | `http://localhost:5173` | CORS origins (comma-separated) |
-| `ADMIN_API_KEYS` | — | Comma-separated bootstrap admin keys |
+| **Mem-OS** | Persistent memory layer | Active |
+| **Universal-MCP-Toolkit** | Tool orchestration (MCP) | Active |
+| **LLM-Guardian** | Token optimization & cost control | **V1.0.0** |
 
-See [docs/architecture.md](docs/architecture.md) for the full system design and API reference.
+Together, the Trio provides a complete local AI stack: memory, tools, and cost-optimized inference.
 
 ---
 
-## 🧪 Running Tests
+## CLI Reference
 
 ```bash
-# Backend (Python)
-pytest tests/backend -v
-
-# Frontend (TypeScript)
-cd frontend && npm test -- --run
-
-# Both via CI locally
-act -j backend-test   # requires 'act' CLI
+guardian start              # Start the API server
+guardian start -p 3001      # Custom port
+guardian start -k sk-or-... # Pass API key
+guardian dash               # Serve the dashboard
+guardian optimize "text"    # Run folding on text
+guardian optimize "text" -t 50  # Max 50 output tokens
 ```
 
 ---
 
-## 📁 Project Layout
+## API Endpoints
 
-```
-llm-guardian/
-├── backend/
-│   ├── api/
-│   │   ├── proxy.py          # OpenAI-compatible /v1 endpoints
-│   │   └── v1/               # Admin dashboard API (/api/v1/*)
-│   ├── core/                 # Router, cache, guardrails, pricing, analytics
-│   ├── models/               # SQLAlchemy ORM (RequestLog, APIKey, UserRule)
-│   ├── utils/                # Settings, DB session factory
-│   └── alembic/              # Database migrations
-├── frontend/                 # React 19 + Vite SPA
-├── tests/                    # pytest + Vitest suites
-├── docs/                     # Architecture, API reference, contributing
-├── .devcontainer/            # VS Code / Codespaces devcontainer
-└── .github/workflows/        # CI/CD
-```
+| Endpoint | Method | Description |
+|---|---|---|
+| `/v1/chat/completions` | POST | OpenAI-compatible proxy |
+| `/api/v1/stats/summary` | GET | Aggregated stats |
+| `/api/v1/stats/savings` | GET | Savings analytics |
+| `/api/v1/stats/compression` | GET | Compression metrics |
+| `/api/v1/logs` | GET | Paginated request logs |
+| `/api/v1/providers` | GET | Model catalog |
+| `/api/v1/budget` | GET | Budget status |
+| `/api/v1/fold` | POST | Standalone folding |
+| `/health` | GET | Health check |
 
 ---
 
-## 🤝 Contributing
+## Configuration
 
-See [docs/contributing.md](docs/contributing.md) for guidelines on setting up a dev environment, writing tests, and submitting pull requests.
-Please also review the project's [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
-
-Short version:
-1. Fork → feature branch → PR against `main`
-2. Backend: `ruff check` + `mypy` + `pytest` must all pass
-3. Frontend: `npm run lint` + `npm run type-check` + `npm test` must all pass
-4. Keep PRs focused; one concern per PR
+| Env Variable | Default | Description |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | OpenRouter API key (required) |
+| `GUARDIAN_PORT` | `3000` | Server port |
+| `DAILY_BUDGET_USD` | `50` | Daily spend cap |
+| `MONTHLY_BUDGET_USD` | `500` | Monthly spend cap |
+| `MAX_REQUEST_COST_USD` | `1.0` | Per-request cost limit |
 
 ---
 
-## 📄 License
+## License
 
 MIT — see [LICENSE](LICENSE).
