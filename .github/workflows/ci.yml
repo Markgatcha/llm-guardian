@@ -100,7 +100,7 @@ jobs:
       - run: bun install
       - run: bunx biome check src/
       - run: bunx tsc --noEmit
-      - run: bun test
+      - run: bun test src/
 
   # ── Docker build smoke-test ────────────────────────────────────────────────
   docker-build:
