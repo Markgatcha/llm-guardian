@@ -2,17 +2,23 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/Cards";
 import { api, type LogItem, type LogsResponse } from "../lib/api";
 import { formatCurrency, formatLatency, formatCompactNumber } from "../lib/utils";
+import { Activity, ScrollText } from "lucide-react";
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
   const fetchData = useCallback(async () => {
     try {
+      setError(null);
+      setLoading(true);
       const data = await api.logs(limit, offset);
       setLogs(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load logs");
     } finally {
       setLoading(false);
     }
@@ -33,15 +39,39 @@ export default function LogsPage() {
         </p>
       </header>
 
+      {error && (
+        <Card className="border-red-900/60 bg-red-950/25">
+          <CardContent className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-red-300" />
+            <p className="text-sm text-red-200">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Recent Requests</CardTitle>
           <CardDescription>
-            {logs ? `${logs.total} total requests` : "Loading..."}
+            {logs ? `${logs.total} total requests` : loading ? "Loading..." : "No data"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {logs && logs.items.length > 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="skeleton h-5 w-24" />
+                  <div className="skeleton h-5 w-12" />
+                  <div className="skeleton h-5 w-12" />
+                  <div className="skeleton h-5 w-14" />
+                  <div className="skeleton h-5 w-14" />
+                  <div className="skeleton h-5 w-12" />
+                  <div className="skeleton h-5 w-16" />
+                  <div className="skeleton h-5 w-20" />
+                </div>
+              ))}
+            </div>
+          ) : logs && logs.items.length > 0 ? (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -68,24 +98,29 @@ export default function LogsPage() {
                 <button
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}
-                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
                 >
                   Previous
                 </button>
                 <span className="text-xs text-slate-500">
-                  {offset + 1}–{Math.min(offset + limit, logs.total)} of {logs.total}
+                  {offset + 1}&ndash;{Math.min(offset + limit, logs.total)} of {logs.total}
                 </span>
                 <button
                   onClick={() => setOffset(offset + limit)}
                   disabled={offset + limit >= logs.total}
-                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
                 >
                   Next
                 </button>
               </div>
             </>
           ) : (
-            <p className="py-16 text-center text-sm text-slate-500">No requests logged yet.</p>
+            <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-500">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-800 bg-slate-900/50">
+                <ScrollText className="h-6 w-6 text-slate-600" />
+              </div>
+              <p className="text-sm">No requests logged yet.</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -102,10 +137,10 @@ function LogRow({ item }: { item: LogItem }) {
         hour: "2-digit",
         minute: "2-digit",
       })
-    : "—";
+    : "\u2014";
 
   return (
-    <tr className="border-b border-slate-800/50 text-slate-300">
+    <tr className="border-b border-slate-800/50 text-slate-300 transition-colors hover:bg-slate-900/40">
       <td className="py-3 pr-4">
         <span className="font-medium text-slate-100">{modelShort}</span>
       </td>
@@ -114,7 +149,7 @@ function LogRow({ item }: { item: LogItem }) {
       <td className="py-3 pr-4">{formatCurrency(item.costUsd)}</td>
       <td className="py-3 pr-4">
         <span className={item.savedUsd > 0 ? "text-emerald-400" : "text-slate-500"}>
-          {item.savedUsd > 0 ? `-${formatCurrency(item.savedUsd)}` : "—"}
+          {item.savedUsd > 0 ? `-${formatCurrency(item.savedUsd)}` : "\u2014"}
         </span>
       </td>
       <td className="py-3 pr-4">{formatLatency(item.latencyMs)}</td>

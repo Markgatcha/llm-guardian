@@ -52,3 +52,39 @@ export function MetricCard({ title, value, description, icon, accentClassName }:
     </Card>
   );
 }
+
+export function MetricCardSkeleton() {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between gap-4">
+        <div className="space-y-3">
+          <div className="skeleton h-4 w-24" />
+          <div className="skeleton h-8 w-20" />
+          <div className="skeleton h-4 w-40" />
+        </div>
+        <div className="skeleton h-12 w-12 rounded-2xl" />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="space-y-2">
+          <div className="skeleton h-5 w-32" />
+          <div className="skeleton h-4 w-48" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex h-72 items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="skeleton h-12 w-12 rounded-full" />
+            <div className="skeleton h-4 w-40" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

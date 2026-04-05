@@ -1,8 +1,15 @@
-const API_BASE = "/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const url = `${API_BASE}/api/v1${path}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+      throw new Error(`API returned HTML (status ${res.status}). Is the backend running at ${API_BASE}?`);
+    }
+    throw new Error(`API error: ${res.status} ${res.statusText}`);
+  }
   return res.json();
 }
 
