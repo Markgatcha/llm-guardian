@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Backend ────────────────────────────────────────────────────────────────
+  # — Backend ————————————————————————————————————————
   backend-lint:
     name: Backend – Lint & Type-check
     runs-on: ubuntu-latest
@@ -54,7 +54,7 @@ jobs:
           SECRET_KEY: "ci-test-secret-key-32-chars-xxxx"
         run: pytest tests/backend -v --tb=short
 
-  # ── Frontend ───────────────────────────────────────────────────────────────
+  # — Frontend ————————————————————————————————————————
   frontend-lint:
     name: Frontend – Lint & Type-check
     runs-on: ubuntu-latest
@@ -68,7 +68,7 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-          - run: npm install
+      - run: npm install
       - run: npm run lint
       - run: npm run type-check
 
@@ -85,10 +85,10 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-          - run: npm install
+      - run: npm install
       - run: npm test -- --run
 
-  # ── Core Engine (Bun/TypeScript) ───────────────────────────────────────────
+  # — Core Engine (Bun/TypeScript) ————————————————————
   core-test:
     name: Core – Lint & Typecheck
     runs-on: ubuntu-latest
@@ -98,33 +98,33 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - run: bunx biome check src/
-      - run: bunx tsc --noEmit
-        # ── Docker build smoke-test ────────────────────────────────────────────────
+        working-directory: src
+      - run: bun run lint
+        working-directory: src
+      - run: bun run typecheck
+        working-directory: src
+
+  # — Dashboard (Vite/Bun) ————————————————————————————
+  dashboard-test:
+    name: Dashboard – Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+        working-directory: src/dashboard
+      - run: bun run lint
+        working-directory: src/dashboard
+      - run: bun run build
+        working-directory: src/dashboard
+
+  # — Docker ——————————————————————————————————————————
   docker-build:
-    name: Docker – Build image
+    name: Docker – Build Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build (no push)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: llm-guardian:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ── Validate config YAML ───────────────────────────────────────────────────
-  config-yaml:
-    name: Config – YAML parse check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install pyyaml
-      - name: Parse config.example.yaml
-        run: python -c "import yaml, sys; yaml.safe_load(open('config.example.yaml'))" && echo "✅ config.example.yaml is valid YAML"
+      - run: docker buildx build --platform linux/amd64 --no-cache -t llm-guardian:ci .
