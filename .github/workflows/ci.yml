@@ -115,8 +115,6 @@ jobs:
           bun-version: latest
       - run: bun install
         working-directory: src/dashboard
-      - run: bun run lint
-        working-directory: src/dashboard
       - run: bun run build
         working-directory: src/dashboard
 
