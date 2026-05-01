@@ -37,12 +37,13 @@
     }
   },
   "files": {
-    "ignore": [
-      "src/dashboard/",
-      "node_modules/",
-      "dist/",
-      "build/",
-      "bun.lock"
+    "includes": [
+      "**",
+      "!src/dashboard/**",
+      "!node_modules/**",
+      "!dist/**",
+      "!build/**",
+      "!bun.lock"
     ]
   }
 }
