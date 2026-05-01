@@ -4,7 +4,7 @@
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Glama](https://img.shields.io/badge/Glama-coming%20soon-lightgrey)](https://glama.ai)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
 **Central Nervous System of the AI Trio** — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding.
 
