@@ -18,7 +18,7 @@
       },
       "suspicious": {
         "noExplicitAny": "warn",
-        "noConsoleLog": "off"
+        "noConsole": "off"
       },
       "correctness": {
         "noUnusedVariables": "warn",
@@ -27,12 +27,13 @@
     }
   },
   "files": {
-    "ignore": [
-      "src/dashboard/",
-      "node_modules/",
-      "dist/",
-      "build/",
-      "bun.lock"
+    "includes": [
+      "**",
+      "!src/dashboard/",
+      "!node_modules/",
+      "!dist/",
+      "!build/",
+      "!bun.lock"
     ]
   }
 }
