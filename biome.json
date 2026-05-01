@@ -18,6 +18,7 @@
         "useNumberNamespace": "off",
         "useNodejsImportProtocol": "off",
         "useConst": "warn",
+        "noNonNullAssertion": "off",
         "noUnusedTemplateLiteral": "off"
       },
       "suspicious": {
@@ -27,17 +28,21 @@
       "correctness": {
         "noUnusedVariables": "warn",
         "noUnusedImports": "warn"
+      },
+      "a11y": {
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off",
+        "useButtonType": "off"
       }
     }
   },
   "files": {
-    "includes": [
-      "**",
-      "!src/dashboard/",
-      "!node_modules/",
-      "!dist/",
-      "!build/",
-      "!bun.lock"
+    "ignore": [
+      "src/dashboard/",
+      "node_modules/",
+      "dist/",
+      "build/",
+      "bun.lock"
     ]
   }
 }
