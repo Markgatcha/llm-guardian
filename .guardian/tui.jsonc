@@ -1,0 +1,9 @@
+{
+  "theme": "guardian-dark",
+  "keymap": { "commandPalette": "ctrl+p", "cycleAgent": "tab" },
+  "mouse": false,
+  "scrollSpeed": 3,
+  "diffStyle": "unified",
+  "compactMode": false,
+  "statusline": ["workspace", "agent", "model", "savings", "budget"]
+}

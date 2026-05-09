@@ -1,0 +1,11 @@
+{
+  "apiUrl": "http://localhost:3000",
+  "adminKeyEnv": "GUARDIAN_API_KEY",
+  "refreshMs": 5000,
+  "theme": "guardian-dark",
+  "defaultModel": "auto",
+  "siblings": {
+    "memos": "../memos",
+    "universalMcpToolkit": "../universal-mcp-toolkit"
+  }
+}

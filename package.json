@@ -1,7 +1,7 @@
 {
   "name": "llm-guardian",
   "version": "1.0.0",
-  "description": "Central Nervous System of the AI Trio — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding",
+  "description": "Central Nervous System of the AI Trio - zero-config, sub-30ms token optimization with Semantic Folding and VCM Sharding",
   "type": "module",
   "main": "src/core/orchestrator.ts",
   "module": "src/core/orchestrator.ts",
@@ -16,17 +16,19 @@
     "config.example.yaml"
   ],
   "scripts": {
-    "start": "bun run src/cli/index.ts --start",
-    "dashboard": "bun run src/cli/index.ts --dash",
-    "optimize": "bun run src/cli/index.ts --optimize",
-    "dev": "bun --watch src/cli/index.ts --start",
+    "start": "bun run src/cli/index.ts start server",
+    "dashboard": "bun run src/cli/index.ts dash",
+    "tui": "bun run src/cli/index.ts",
+    "optimize": "bun run src/cli/index.ts optimize",
+    "dev": "bun --watch src/cli/index.ts start server",
     "test": "bun test",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
+    "@opentui/core": "0.2.3",
     "commander": "^12.1.0",
-        "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.6.0",
     "nanoid": "^5.0.9",
     "openai": "^4.70.0",
@@ -34,7 +36,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-        "@biomejs/cli-linux-x64": "1.9.4",
+    "@biomejs/cli-linux-x64": "1.9.4",
     "@types/bun": "^1.1.0",
     "typescript": "^5.6.0"
   }
