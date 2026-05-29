@@ -8,7 +8,7 @@
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
 **Central Nervous System of the AI Trio** — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding.
 
-> Part of the **AI Trio**: [Mem-OS](https://github.com/anomalyco/mem-os) (Memory) · [Universal-MCP-Toolkit](https://github.com/anomalyco/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
+> Part of the **AI Trio**: [Mem-OS](https://github.com/markgatcha/mem-os) (Memory) · [Universal-MCP-Toolkit](https://github.com/markgatcha/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
 
 ---
 
