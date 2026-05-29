@@ -20,7 +20,7 @@ LLM-Guardian sits between your application and LLM providers, compressing prompt
 |---|---|
 | **Semantic Folding (EDH)** | Converts verbose text into entity-dense headlinese: `[ACTION:Refactor][TARGET:VCM]` |
 | **VCM Sharding** | Builds context skeletons and injects only high-relevance knowledge shards |
-| **Cross-Model Fingerprinting** | Re-orders prompt components per model's attention biases (Claude 4.7, Gemini 3.1, GPT-5.5) |
+| **Cross-Model Fingerprinting** | Re-orders prompt components per model's attention biases (Claude 4.8, Gemini 3.1, GPT-5.5) |
 | **Tool Fusion** | Compresses multiple MCP tool-turns into a single semantic block |
 | **Privacy Shield** | PII redaction + prompt injection blocking (sub-millisecond) |
 | **Budget Enforcement** | Per-request, daily, and monthly cost limits |
@@ -89,7 +89,7 @@ Client Request
       │
       ▼
 ┌─────────────────────────────────────────────────────────┐
-│                 Guardian Orchestrator                     │
+│                 Guardian Orchestrator                    │
 │                                                          │
 │  1. Privacy Shield    → PII redaction + injection block  │
 │  2. Tool Fusion       → Multi-turn MCP output compression│
