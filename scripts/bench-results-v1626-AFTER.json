@@ -1,0 +1,79 @@
+{
+  "generatedAt": "2026-06-19T19:59:27.825Z",
+  "runtime": "bun 1.4.0",
+  "release": "v1.6.26-new-modules",
+  "results": [
+    {
+      "name": "token-counter-bpe",
+      "operation": "token-counting",
+      "method": "GPT-style BPE estimator",
+      "inputTokens": 720,
+      "p50Ms": 0.046,
+      "p95Ms": 0.107,
+      "p99Ms": 0.163,
+      "meanMs": 0.057,
+      "samples": 1000,
+      "note": "vs naive char/4 baseline",
+      "naiveP50Ms": 0
+    },
+    {
+      "name": "retain-filter",
+      "operation": "retain-scoring",
+      "threshold": 0.35,
+      "signalTurn": {
+        "content": "Deploy is scheduled for Friday. The pipe...",
+        "retain": false,
+        "score": 0.2833333333333333,
+        "reason": "below retain threshold"
+      },
+      "fillerTurn": {
+        "content": "Sure! Let me know if you need anything e...",
+        "retain": false,
+        "score": 0.2,
+        "reason": "below retain threshold"
+      },
+      "typicalTurn": {
+        "content": "Sure, I can help with that! Let me take ...",
+        "retain": true,
+        "score": 0.4666666666666667,
+        "reason": "signal density above threshold"
+      },
+      "p50Ms": 0.017,
+      "p95Ms": 0.036,
+      "p99Ms": 0.065,
+      "meanMs": 0.023,
+      "samples": 1000
+    },
+    {
+      "name": "tool-gater",
+      "operation": "catalog-trimming",
+      "catalogSize": 52,
+      "toolsSent": 8,
+      "toolsRemoved": 44,
+      "fullSchemaTokens": 738,
+      "gatedSchemaTokens": 117,
+      "schemaTokenReduction": 0.841,
+      "p50Ms": 0.083,
+      "p95Ms": 0.22,
+      "p99Ms": 0.36,
+      "meanMs": 0.108,
+      "samples": 1000
+    },
+    {
+      "name": "prompt-cache",
+      "operation": "stable-prefix-structuring",
+      "minCacheablePrefixTokens": 1024,
+      "messageCount": 14,
+      "cachingStructured": true,
+      "cacheablePrefixTokens": 1428,
+      "volatileSuffixTokens": 7,
+      "cacheEligible": true,
+      "estimatedAnthropicSavingsPct": 90,
+      "p50Ms": 0.081,
+      "p95Ms": 0.186,
+      "p99Ms": 0.27,
+      "meanMs": 0.098,
+      "samples": 1000
+    }
+  ]
+}

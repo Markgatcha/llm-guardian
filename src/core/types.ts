@@ -82,6 +82,12 @@ export interface ShardingResult {
 	shardedTokens: number;
 	/** Compression ratio achieved */
 	compressionRatio: number;
+	/** Number of shards removed by cross-shard dedup (v1.6.26) */
+	shardsDeduped?: number;
+	/** Sharded tokens used vs. budget (v1.6.26 adaptive budget) */
+	budgetUsed?: number;
+	/** Total token budget (v1.6.26 adaptive budget) */
+	budgetTotal?: number;
 }
 
 // ─── Cross-Model Fingerprinting Types ────────────────────────────────────────

@@ -2,7 +2,7 @@
 // Uses local analysis to identify high-relevance context shards
 // Reduces context bloat by 60-90% while preserving semantic coherence
 
-import { estimateTokens } from "./folding-engine.ts";
+import { estimateTokens } from "./token-counter.ts";
 import type {
 	ChatMessage,
 	ContextSkeleton,
@@ -11,6 +11,35 @@ import type {
 	KnowledgeShard,
 	ShardingResult,
 } from "./types.ts";
+
+// ─── Helpers: similarity (semantic shard dedup) ─────────────────────────────
+
+/**
+ * Term-frequency cosine similarity over lowercased word tokens. Cheap and
+ * zero-dependency. Used to deduplicate near-identical context shards so the
+ * model isn't fed the same information twice — the "semantic folding" intent
+ * applied to the shard layer. Returns a value in [0, 1].
+ */
+function contentSimilarity(a: string, b: string): number {
+	const tokenize = (s: string) =>
+		s
+			.toLowerCase()
+			.split(/[^a-z0-9]+/i)
+			.filter((w) => w.length > 2);
+	const ta = tokenize(a);
+	const tb = tokenize(b);
+	if (ta.length === 0 || tb.length === 0) return 0;
+
+	const freq = new Map<string, number>();
+	for (const w of ta) freq.set(w, (freq.get(w) ?? 0) + 1);
+	let dot = 0;
+	for (const w of tb) {
+		const c = freq.get(w);
+		if (c) dot += c;
+	}
+	const denom = Math.sqrt(ta.length) * Math.sqrt(tb.length);
+	return denom > 0 ? dot / denom : 0;
+}
 
 // ─── Skeleton Builder ────────────────────────────────────────────────────────
 
@@ -123,6 +152,41 @@ function extractEntitiesFromMessage(content: string): ExtractedEntity[] {
 		}
 	}
 
+	// URLs (v1.6.26 richer extraction — aligns with the folding engine's
+	// entity patterns so skeleton relevance scoring catches the same signals).
+	const urls = content.match(/https?:\/\/[^\s,)]+/g);
+	if (urls) {
+		for (const url of urls.slice(0, 5)) {
+			entities.push({ name: url, type: "data" });
+		}
+	}
+
+	// API endpoints
+	const endpoints = content.match(/(?:GET|POST|PUT|DELETE|PATCH)\s+\/[\w/:-]+/g);
+	if (endpoints) {
+		for (const ep of endpoints.slice(0, 5)) {
+			entities.push({ name: ep, type: "tool" });
+		}
+	}
+
+	// Model names (gpt-4/5, claude, gemini, etc.)
+	const modelNames = content.match(
+		/(?:gpt-4(?:\.\d)?|gpt-5(?:\.\d)?|claude-(?:3\.\d|4\.\d)|gemini-(?:\d\.\d)|o[13]|llama|mistral|deepseek)/gi,
+	);
+	if (modelNames) {
+		for (const model of [...new Set(modelNames)].slice(0, 5)) {
+			entities.push({ name: model, type: "concept" });
+		}
+	}
+
+	// Numbers with units (metrics, thresholds, costs) — strong relevance signal
+	const metrics = content.match(/\b\d+(?:\.\d+)?(?:%|ms|s|tok|tokens|usd|\$)\b/gi);
+	if (metrics) {
+		for (const metric of metrics.slice(0, 5)) {
+			entities.push({ name: metric, type: "data" });
+		}
+	}
+
 	return entities;
 }
 
@@ -216,12 +280,21 @@ function scoreMessages(
 function assembleShards(
 	scored: ScoredMessage[],
 	tokenBudget: number,
-): KnowledgeShard[] {
+): { shards: KnowledgeShard[]; shardsDeduped: number } {
 	// Sort by combined score descending
 	const sorted = [...scored].sort((a, b) => b.combinedScore - a.combinedScore);
 
 	const shards: KnowledgeShard[] = [];
 	let remainingBudget = tokenBudget;
+	let shardsDeduped = 0;
+
+	// Adaptive relevance cutoff. The base is 0.15 (the original fixed floor).
+	// When most of the budget is still free, we relax the bar so more marginal
+	// but distinct context is retained. When the budget is tight, we raise the
+	// bar so only the most relevant shards make the cut. This adapts sharding
+	// to both small (over-budget) and large (headroom-rich) contexts.
+	const budgetUsage = tokenBudget > 0 ? 1 - remainingBudget / tokenBudget : 1;
+	const adaptiveCutoff = budgetUsage < 0.5 ? 0.1 : budgetUsage > 0.8 ? 0.25 : 0.15;
 
 	// Always include system messages first
 	const systemMessages = sorted.filter((s) => s.message.role === "system");
@@ -239,11 +312,23 @@ function assembleShards(
 		}
 	}
 
-	// Include highest-scoring non-system messages
+	// Include highest-scoring non-system messages.
+	// Semantic dedup: skip a candidate if it is >= 0.85 similar to a shard we
+	// already kept — collapses redundant context before it reaches the model.
 	const nonSystem = sorted.filter((s) => s.message.role !== "system");
 	for (const msg of nonSystem) {
 		const tokens = estimateTokens(msg.message.content);
-		if (tokens <= remainingBudget && msg.combinedScore > 0.15) {
+
+		// Semantic dedup check against already-kept shards.
+		const isDup = shards.some(
+			(s) => contentSimilarity(s.content, msg.message.content) >= 0.85,
+		);
+		if (isDup) {
+			shardsDeduped++;
+			continue;
+		}
+
+		if (tokens <= remainingBudget && msg.combinedScore > adaptiveCutoff) {
 			shards.push({
 				id: `shard-${msg.index}`,
 				content: msg.message.content,
@@ -259,7 +344,7 @@ function assembleShards(
 	// Sort shards by original index to maintain conversation flow
 	shards.sort((a, b) => a.sourceIndices[0] - b.sourceIndices[0]);
 
-	return shards;
+	return { shards, shardsDeduped };
 }
 
 // ─── Main Sharding Function ──────────────────────────────────────────────────
@@ -277,8 +362,8 @@ export function shardContext(
 	// Score all messages
 	const scored = scoreMessages(messages, query, skeleton);
 
-	// Assemble shards within token budget
-	const shards = assembleShards(scored, maxTokens);
+	// Assemble shards within token budget (with semantic dedup + adaptive cutoff)
+	const { shards, shardsDeduped } = assembleShards(scored, maxTokens);
 
 	// Build injected context
 	const injectedContext = shards.map((s) => s.content).join("\n\n");
@@ -292,6 +377,11 @@ export function shardContext(
 		shardedTokens,
 		compressionRatio:
 			skeleton.totalTokens > 0 ? shardedTokens / skeleton.totalTokens : 1,
+		// New additive metrics (v1.6.26): how many near-duplicate shards were
+		// collapsed, and how much of the budget was used vs. the total.
+		shardsDeduped,
+		budgetUsed: shardedTokens,
+		budgetTotal: maxTokens,
 	};
 }
 

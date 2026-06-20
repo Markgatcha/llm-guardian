@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-06-19T02:23:02.205Z",
+  "runtime": "bun 1.4.0",
+  "results": [
+    {
+      "name": "release-notes",
+      "operation": "semantic-folding",
+      "originalTokens": 58,
+      "foldedTokens": 74,
+      "compressionRatio": 1.276,
+      "tokensSaved": 0,
+      "p50Ms": 0.001,
+      "p95Ms": 0.008,
+      "p99Ms": 0.218,
+      "meanMs": 0.007,
+      "samples": 100
+    },
+    {
+      "name": "long-context",
+      "operation": "semantic-folding",
+      "originalTokens": 3098,
+      "foldedTokens": 138,
+      "compressionRatio": 0.045,
+      "tokensSaved": 2960,
+      "p50Ms": 0.009,
+      "p95Ms": 0.02,
+      "p99Ms": 0.027,
+      "meanMs": 0.01,
+      "samples": 100
+    },
+    {
+      "name": "tool-output-fusion",
+      "operation": "tool-fusion",
+      "originalTokens": 900,
+      "foldedTokens": 342,
+      "compressionRatio": 0.38,
+      "tokensSaved": 558,
+      "p50Ms": 0.148,
+      "p95Ms": 0.287,
+      "p99Ms": 0.355,
+      "meanMs": 0.169,
+      "samples": 100
+    }
+  ]
+}

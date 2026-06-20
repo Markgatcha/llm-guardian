@@ -1,28 +1,87 @@
 {
   "name": "llm-guardian",
-  "version": "1.0.0",
-  "description": "Central Nervous System of the AI Trio — zero-config, sub-30ms token optimization with Semantic Folding & VCM Sharding",
+  "version": "1.6.26",
+  "description": "LLM token optimization gateway — Semantic Folding, VCM Sharding, prompt caching, tool gating. 80-95% prompt compression with sub-30ms overhead.",
   "type": "module",
   "main": "src/core/orchestrator.ts",
   "module": "src/core/orchestrator.ts",
   "types": "src/core/types.ts",
   "bin": {
-    "guardian": "src/cli/index.ts"
+    "guardian": "dist/guardian.js"
+  },
+  "exports": {
+    ".": {
+      "types": "src/core/types.ts",
+      "import": "src/core/orchestrator.ts"
+    },
+    "./folding": {
+      "types": "src/core/folding-engine.ts",
+      "import": "src/core/folding-engine.ts"
+    },
+    "./sharding": {
+      "types": "src/core/vcm-sharder.ts",
+      "import": "src/core/vcm-sharder.ts"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
+    "dist/",
     "src/",
     "README.md",
     "LICENSE",
     "config.example.yaml"
   ],
+  "sideEffects": false,
+  "keywords": [
+    "llm",
+    "token-optimization",
+    "prompt-compression",
+    "semantic-folding",
+    "vcm-sharding",
+    "ai-gateway",
+    "openai-proxy",
+    "cost-optimization",
+    "prompt-caching",
+    "context-engineering",
+    "anthropic",
+    "openrouter",
+    "guardrails",
+    "token-reduction",
+    "context-window",
+    "bun",
+    "agent-framework",
+    "tool-gating",
+    "ai-trio",
+    "budget-management"
+  ],
+  "author": "Markgatcha",
+  "license": "MIT",
+  "homepage": "https://github.com/Markgatcha/llm-guardian#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Markgatcha/llm-guardian.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Markgatcha/llm-guardian/issues"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "start": "bun run src/cli/index.ts --start",
-    "dashboard": "bun run src/cli/index.ts --dash",
-    "optimize": "bun run src/cli/index.ts --optimize",
-    "dev": "bun --watch src/cli/index.ts --start",
+    "start": "bun run src/cli/index.ts start server",
+    "dashboard": "bun run src/cli/index.ts dash",
+    "tui": "bun run src/cli/index.ts",
+    "optimize": "bun run src/cli/index.ts optimize",
+    "dev": "bun --watch src/cli/index.ts start server",
+    "build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js && bash scripts/trim-wasm.sh",
+    "bench": "bun run scripts/bench.ts",
     "test": "bun test",
     "lint": "bunx biome check src/",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {
     "commander": "^12.1.0",
