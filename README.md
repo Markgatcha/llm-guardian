@@ -361,7 +361,7 @@ Guardian routes every request through a provider adapter behind a unified `Compl
 
 - Adapter: `src/providers/anthropic-adapter.ts` via the official `@anthropic-ai/sdk`.
 - Auth: `guardian auth anthropic` or set `ANTHROPIC_API_KEY`.
-- Default model: `claude-sonnet-4-5`. Use the `anthropic/` prefix, e.g. `anthropic/claude-sonnet-4-5`.
+- Default model: `claude-sonnet-4-6`. Use the `anthropic/` prefix, e.g. `anthropic/claude-sonnet-4-6`.
 - System messages are split into Anthropic's top-level `system` field; conversation history maps to `user`/`assistant` turns.
 - Provider errors are redacted through `providerSdkError` (missing key, invalid key, rate limit, etc.).
 
@@ -369,7 +369,7 @@ Guardian routes every request through a provider adapter behind a unified `Compl
 
 - Adapter: `src/providers/gemini-adapter.ts` via the official `@google/genai` SDK.
 - Auth: `guardian auth gemini` or set `GEMINI_API_KEY`.
-- Default model: `gemini-2.5-flash`. Use the `gemini/` prefix, e.g. `gemini/gemini-2.5-flash`.
+- Default model: `gemini-3.5-flash`. Use the `gemini/` prefix, e.g. `gemini/gemini-3.5-flash`.
 - System messages become `systemInstruction`; conversation turns map to `user`/`model` roles.
 
 ### OpenAI-Compatible Adapters
