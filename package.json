@@ -77,7 +77,7 @@
     "optimize": "bun run src/cli/index.ts optimize",
     "dev": "bun --watch src/cli/index.ts start server",
     "build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js && bash scripts/trim-wasm.sh",
-    "bench": "bun run scripts/bench.ts",
+    "bench": "bun run scripts/bench-v1626-modules.ts",
     "test": "bun test",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit",
