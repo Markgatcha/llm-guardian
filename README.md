@@ -12,6 +12,18 @@
 
 > Part of the **AI Trio**: [MemOS](https://github.com/Markgatcha/memos) (Memory) · [Universal-MCP-Toolkit](https://github.com/Markgatcha/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
 
+## 🔗 Part of the AI Trio
+
+LLM-Guardian is one of three sibling projects that compose into a complete agent memory + tooling stack:
+
+| Project | Role |
+| --- | --- |
+| **[universal-mcp-toolkit](https://github.com/Markgatcha/universal-mcp-toolkit)** | MCP protocol, server registry, and tool routing |
+| **[memos](https://github.com/Markgatcha/memos)** | Graph-based persistent memory across agent sessions |
+| **[llm-guardian](https://github.com/Markgatcha/llm-guardian)** | Token-cost guardian that compresses prompts and injects MemOS memory slices |
+
+Together they cover transport + tools (UMT), memory + persistence (MemOS), and LLM inference cost control (llm-guardian). LLM-Guardian pulls token-budgeted memory slices from MemOS and injects them ahead of the conversation, and routes tool calls through UMT's MCP servers.
+
 ---
 
 ## What It Does
