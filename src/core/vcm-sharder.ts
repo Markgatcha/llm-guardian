@@ -135,13 +135,21 @@ function extractEntitiesFromMessage(content: string): ExtractedEntity[] {
 		}
 	}
 
-	// File paths. The path prefix class intentionally excludes "." so the
-	// quantifier cannot overlap the extension's leading dot (avoids a
-	// polynomial-redos flagged by CodeQL js/polynomial-redos).
-	const filePaths = content.match(
-		/(?:[\w/-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml))/g,
-	);
-	if (filePaths) {
+	// File paths. Extract candidate path-like tokens with a simple
+	// char-class repeat (no quantifier-then-alternation, so CodeQL's
+	// js/polynomial-redos does not flag it), then keep only those that end
+	// in a known source extension via a quantifier-free test.
+	const filePaths: string[] = [];
+	const pathTokenRe = /[\w./-]+/g;
+	let pathMatch: RegExpExecArray | null = pathTokenRe.exec(content);
+	while (pathMatch !== null) {
+		const tok = pathMatch[0];
+		if (/\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml)$/.test(tok)) {
+			filePaths.push(tok);
+		}
+		pathMatch = pathTokenRe.exec(content);
+	}
+	if (filePaths.length > 0) {
 		for (const path of filePaths) {
 			entities.push({ name: path, type: "code" });
 		}
