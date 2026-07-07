@@ -1,0 +1,26 @@
+#!/bin/sh
+# Pre-commit hook (llm-guardian): auto-format + auto-fix staged files with
+# biome, then re-stage. Non-blocking — cleans the commit, never fails it.
+# Biome handles both lint and format for .ts/.json in one pass.
+#
+# Activate once with: git config core.hooksPath .githooks
+set -e
+
+if [ ! -f package.json ]; then
+  exit 0
+fi
+
+staged=$(git diff --cached --diff-filter=ACMR --name-only -- '*.ts' '*.json' '*.js' || true)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+bunx biome check --write $staged >/dev/null 2>&1 || true
+
+echo "$staged" | while IFS= read -r f; do
+  if [ -n "$f" ]; then
+    git add -- "$f"
+  fi
+done
+
+exit 0
