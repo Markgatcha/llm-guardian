@@ -72,7 +72,8 @@ program
 					enableFolding: body.enable_folding ?? true,
 					enableSharding: body.enable_sharding ?? true,
 					enableToolFusion: body.enable_tool_fusion ?? true,
-				};
+					memoryPack: body.memory_pack,
+					};
 
 				if (request.stream) {
 					// Streaming response

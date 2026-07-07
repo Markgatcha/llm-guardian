@@ -193,6 +193,21 @@ export interface GuardianRequest {
 	enableSharding?: boolean;
 	/** Enable Tool Fusion */
 	enableToolFusion?: boolean;
+	/**
+	 * Pre-built memory pack (e.g. a MemOS TOON context pack) to inject as a
+	 * high-relevance context shard during VCM Sharding. This is the AI Trio
+	 * integration point: llm-guardian consumes a token-budgeted memory slice
+	 * produced by the memos (`@mem-os/sdk`) sibling repo instead of (or in
+	 * addition to) re-deriving context purely from chat history.
+	 *
+	 * Expected to be compact, already-debloated text (TOON format yields
+	 * 60-90% compression vs raw JSON). When present, it is injected ahead of
+	 * the sharded chat history so the model sees grounded memory first.
+	 * Leave undefined to disable memory injection. The pack is produced
+	 * out-of-band (e.g. by a memos adapter) — Guardian takes no hard
+	 * dependency on the memos package.
+	 */
+	memoryPack?: string;
 }
 
 export interface ChatMessage {
@@ -245,6 +260,10 @@ export interface OptimizationMetrics {
 	retainFilterDropped?: number;
 	/** Tokens saved by dropping low-signal turns up front. */
 	retainFilterTokensSaved?: number;
+	/** True if a memory pack (e.g. MemOS TOON) was injected during sharding. */
+	memoryPackInjected?: boolean;
+	/** Tokens the injected memory pack occupied in the final prompt. */
+	memoryPackTokens?: number;
 	totalTokensSaved: number;
 	totalSavingsUsd: number;
 }

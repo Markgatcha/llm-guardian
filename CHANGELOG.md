@@ -1,3 +1,39 @@
+# llm-guardian v1.6.27
+
+Performance + integration release: activates the Retain Pre-Filter end-to-end and
+adds token-time optimizations to the optimization pipeline, plus the first
+cross-repo AI Trio integration point with memos.
+
+## Added
+
+- **AI Trio memory integration** (`src/core/memos-memory-source.ts`) — optional,
+  decoupled adapter that bridges VCM Sharding to the memos (`@mem-os/sdk`) sibling
+  repo. `createMemOSMemorySource()` lazily imports MemOS and produces a TOON
+  context pack (60-90% smaller than JSON) consumable by the orchestrator via
+  `request.memoryPack`. Guardian takes no hard dependency on memos — the package
+  is only resolved at call time, so both repos stay independently publishable.
+- **`request.memoryPack`** field on `GuardianRequest` — a pre-built, already
+  compressed memory pack injected as a high-relevance context shard ahead of
+  VCM Sharding. Surfaced in metrics as `memoryPackInjected` / `memoryPackTokens`.
+
+## Changed
+
+- **Retain Pre-Filter is now wired into the orchestration pipeline** — previously
+  an orphaned module. It runs as Step 1b (after privacy, before folding/sharding)
+  in both `orchestrate()` and `orchestrateStream()`, dropping low-signal turns
+  (greetings, acknowledgements, restatements) before any expensive processing.
+  System messages are always preserved; novelty tracking accumulates seen
+  entities across kept turns. New metrics: `retainFilterApplied`,
+  `retainFilterDropped`, `retainFilterTokensSaved`.
+- **VCM Sharding: eliminated N+1 entity re-extraction** — `buildSkeleton()` now
+  returns per-message entities (`entitiesByIndex`) that `scoreMessages()` reuses,
+  so entity regexes run exactly once per message instead of being re-run during
+  scoring. Same relevance results, lower CPU on large contexts.
+- **VCM Sharding: fixed re-expansion after folding** — sharding is now gated on
+  the *post-fold* token count (not pre-fold), and its budget is sized to
+  `min(3000, floor(postFoldTokens * 0.9))` so sharding still compresses rather
+  than re-expanding a folded context back toward its original size.
+
 # llm-guardian v1.6.26
 
 This release adds the standalone token-efficiency modules and community files.

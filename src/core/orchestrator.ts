@@ -175,12 +175,44 @@ export async function orchestrate(
 			foldResult.metadata.originalTokens - foldResult.metadata.foldedTokens;
 	}
 
+	// ── Step 3b: Memory Pack Injection (AI Trio / MemOS) ────────────────────
+	// If a pre-built memory pack (e.g. a MemOS TOON context pack) was supplied,
+	// inject it as a high-relevance context shard BEFORE sharding so the sharder
+	// preserves it as a top anchor (like a system message). This lets Guardian
+	// ground the model in token-budgeted memory from the memos sibling repo
+	// instead of re-deriving everything from chat history. The pack is already
+	// compressed (60-90% via TOON), so it adds little token overhead.
+	if (request.memoryPack && request.memoryPack.trim().length > 0) {
+		const packContent = request.memoryPack.trim();
+		workingMessages.unshift({
+			role: "system",
+			content: `## Memory Context (from MemOS)\n${packContent}`,
+		});
+		const packTokens = estimateTokens(packContent);
+		optimization.memoryPackInjected = true;
+		optimization.memoryPackTokens = packTokens;
+	}
+
 	// ── Step 4: VCM Sharding ─────────────────────────────────────────────────
-	if (request.enableSharding && originalPromptTokens > 2000) {
+	// Gate on the POST-FOLD token count (not the original pre-fold count) so a
+	// context that folding already shrank below the threshold isn't re-sharded
+	// with a larger budget — that previously let sharding re-expand a folded
+	// context back toward its original size. Size the shard budget to the
+	// actual remaining context so sharding still *compresses* rather than
+	// preserving everything.
+	const postFoldTokens = workingMessages.reduce(
+		(sum, m) => sum + estimateTokens(m.content),
+		0,
+	);
+	if (request.enableSharding && postFoldTokens > 2000) {
 		const userMessage =
 			workingMessages.filter((m) => m.role === "user").pop()?.content || "";
+		// Keep sharding within the folded context: cap the budget at ~90% of
+		// what's left so low-relevance turns are still dropped, never exceed
+		// the previous 3000 ceiling.
+		const shardBudget = Math.min(3000, Math.floor(postFoldTokens * 0.9));
 		const shardResult = shardMessages(workingMessages, userMessage, {
-			maxTokens: 3000,
+			maxTokens: shardBudget,
 		});
 		workingMessages = shardResult.messages;
 		optimization.shardingApplied = true;

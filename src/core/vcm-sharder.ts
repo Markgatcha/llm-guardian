@@ -43,10 +43,18 @@ function contentSimilarity(a: string, b: string): number {
 
 // ─── Skeleton Builder ────────────────────────────────────────────────────────
 
-function buildSkeleton(messages: ChatMessage[]): ContextSkeleton {
+function buildSkeleton(messages: ChatMessage[]): {
+	skeleton: ContextSkeleton;
+	/** Per-message extracted entities, keyed by message index. Reused by
+	 * scoreMessages() so entity regexes run exactly once per message instead
+	 * of being re-run during scoring (the previous N+1 re-extraction was the
+	 * dominant CPU cost in sharding). */
+	entitiesByIndex: Map<number, ExtractedEntity[]>;
+} {
 	const entities = new Map<string, EntityNode>();
 	const flow: FlowEdge[] = [];
 	let totalTokens = 0;
+	const entitiesByIndex = new Map<number, ExtractedEntity[]>();
 
 	for (let i = 0; i < messages.length; i++) {
 		const msg = messages[i];
@@ -55,6 +63,7 @@ function buildSkeleton(messages: ChatMessage[]): ContextSkeleton {
 
 		// Extract entities from message
 		const extracted = extractEntitiesFromMessage(msg.content);
+		entitiesByIndex.set(i, extracted);
 		for (const { name, type } of extracted) {
 			const key = name.toLowerCase();
 			const existing = entities.get(key);
@@ -100,10 +109,13 @@ function buildSkeleton(messages: ChatMessage[]): ContextSkeleton {
 			: "general conversation";
 
 	return {
-		topic,
-		entities: sortedEntities,
-		flow,
-		totalTokens,
+		skeleton: {
+			topic,
+			entities: sortedEntities,
+			flow,
+			totalTokens,
+		},
+		entitiesByIndex,
 	};
 }
 
@@ -213,6 +225,7 @@ function scoreMessages(
 	messages: ChatMessage[],
 	query: string,
 	skeleton: ContextSkeleton,
+	entitiesByIndex: Map<number, ExtractedEntity[]>,
 ): ScoredMessage[] {
 	const totalMessages = messages.length;
 	const queryEntities = extractEntitiesFromMessage(query);
@@ -227,8 +240,9 @@ function scoreMessages(
 		// Recency score — more recent messages are more relevant
 		const recencyScore = index / Math.max(totalMessages - 1, 1);
 
-		// Entity overlap with query
-		const msgEntities = extractEntitiesFromMessage(message.content);
+		// Entity overlap with query — reuse entities extracted once in
+		// buildSkeleton() instead of re-running the regexes per message.
+		const msgEntities = entitiesByIndex.get(index) ?? [];
 		const entityOverlap = msgEntities.filter((e) =>
 			queryEntities.some(
 				(qe) => qe.name.toLowerCase() === e.name.toLowerCase(),
@@ -356,11 +370,11 @@ export function shardContext(
 ): ShardingResult {
 	const { maxTokens = 4000 } = options;
 
-	// Build context skeleton
-	const skeleton = buildSkeleton(messages);
+	// Build context skeleton (also extracts per-message entities once)
+	const { skeleton, entitiesByIndex } = buildSkeleton(messages);
 
-	// Score all messages
-	const scored = scoreMessages(messages, query, skeleton);
+	// Score all messages (reuses the entities extracted above — no re-extraction)
+	const scored = scoreMessages(messages, query, skeleton, entitiesByIndex);
 
 	// Assemble shards within token budget (with semantic dedup + adaptive cutoff)
 	const { shards, shardsDeduped } = assembleShards(scored, maxTokens);

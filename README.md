@@ -135,7 +135,10 @@ const decision = decideRetain({ content: "Sure, I can help with that!", type: "a
 setRetainClassifier((input) => ({ retain: true, score: 1, reason: "custom" }));
 ```
 
-Enable per-request with `enableRetainFilter: true`. The orchestrator records `retained` and `retainScore` in `OptimizationMetrics` so you can audit what was kept.
+Active by default in the orchestration pipeline (Step 1b, after privacy scan and
+before folding/sharding) — no flag required. The orchestrator records
+`retainFilterApplied`, `retainFilterDropped`, and `retainFilterTokensSaved` in
+`OptimizationMetrics` so you can audit what was dropped.
 
 ### Tool Gating
 
