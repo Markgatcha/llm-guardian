@@ -137,7 +137,7 @@ function extractEntitiesFromMessage(content: string): ExtractedEntity[] {
 
 	// File paths
 	const filePaths = content.match(
-		/(?:[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml))/g,
+		/(?:\w[\w/-]*\.)+(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml)/g,
 	);
 	if (filePaths) {
 		for (const path of filePaths) {

@@ -127,8 +127,12 @@ export function packToToon(pack: MemOSContextPack): string {
 	lines.push("# fields: id|score|trust|source|updatedAt|tags|content");
 	for (const item of pack.items) {
 		const tags = item.tags.join(";");
-		// Pipe-delimited; escape any pipes in content to keep the format stable.
-		const content = item.content.replace(/\|/g, "\\|");
+		// Pipe-delimited; escape backslash, newline, then pipes so the
+		// format stays stable even if content contains those characters.
+		const content = item.content
+			.replace(/\\/g, "\\\\")
+			.replace(/\n/g, "\\n")
+			.replace(/\|/g, "\\|");
 		lines.push(
 			`${item.id}|${item.score.toFixed(3)}|${item.trust}|${item.source}|${item.updatedAt}|${tags}|${content}`,
 		);
