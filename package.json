@@ -84,7 +84,7 @@
     "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {
-    "commander": "^12.1.0",
+    "commander": "^15.0.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.15",
     "nanoid": "^5.1.9",
