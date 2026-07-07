@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { foldText } from "../core/folding-engine.ts";
 import { getRequestLog, getStats, orchestrate } from "../core/orchestrator.ts";
+import { buildRequestMemoryPack } from "../core/memos-memory-source.ts";
 import type { GuardianRequest } from "../core/types.ts";
 import {
 	configure as configureBudget,
@@ -62,6 +63,26 @@ program
 		app.post("/v1/chat/completions", async (c) => {
 			try {
 				const body = await c.req.json();
+				// Derive the user query (last user message) for memory retrieval.
+				const userMessages = (body.messages || []).filter(
+					(m: { role?: string }) => m.role === "user",
+				);
+				const userQuery =
+					(userMessages[userMessages.length - 1]?.content as string) ||
+					"";
+				// Auto-build a MemOS memory pack when not explicitly supplied via
+				// `memory_pack`. buildRequestMemoryPack() is env-gated and fails
+				// soft, so standalone guardian instances are unaffected.
+				const requestedMax = body.max_tokens || body.maxTokens;
+				const packBudget =
+					typeof requestedMax === "number"
+						? Math.min(1500, Math.max(400, requestedMax))
+						: 1200;
+				const memoryPack =
+					body.memory_pack ||
+					(await buildRequestMemoryPack(userQuery, packBudget)) ||
+					undefined;
+
 				const request: GuardianRequest = {
 					model: body.model || "auto",
 					messages: body.messages || [],
@@ -72,8 +93,8 @@ program
 					enableFolding: body.enable_folding ?? true,
 					enableSharding: body.enable_sharding ?? true,
 					enableToolFusion: body.enable_tool_fusion ?? true,
-					memoryPack: body.memory_pack,
-					};
+					memoryPack,
+				};
 
 				if (request.stream) {
 					// Streaming response

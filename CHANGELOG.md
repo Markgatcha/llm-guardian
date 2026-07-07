@@ -12,6 +12,13 @@ cross-repo AI Trio integration point with memos.
   context pack (60-90% smaller than JSON) consumable by the orchestrator via
   `request.memoryPack`. Guardian takes no hard dependency on memos — the package
   is only resolved at call time, so both repos stay independently publishable.
+- **Automatic server wiring for the MemOS pack** — the `/v1/chat/completions`
+  handler now builds a memory pack per request (env-gated via `MEMOS_NAMESPACE` /
+  `MEMOS_STORAGE_PATH`) and injects it ahead of the conversation. A cached,
+  process-wide MemOS source is reused across requests; failures are soft (the
+  request proceeds without memory) so standalone Guardian instances are
+  unaffected. An explicit `memory_pack` in the request body overrides the
+  auto-built pack.
 - **`request.memoryPack`** field on `GuardianRequest` — a pre-built, already
   compressed memory pack injected as a high-relevance context shard ahead of
   VCM Sharding. Surfaced in metrics as `memoryPackInjected` / `memoryPackTokens`.

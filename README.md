@@ -26,6 +26,27 @@ LLM-Guardian sits between your application and LLM providers, compressing prompt
 | **Tool Gating** *(new, v1.6.26)* | Filters the tool catalog to the handful a query actually needs before sending schemas. No-op for small catalogs; up to 14-70% schema-token savings on large ones. |
 | **Prompt Caching** *(new, v1.6.26)* | Reorders the conversation into a stable prefix and stamps `cache_control` breakpoints. Anthropic ~90% off on cache hits, OpenAI 50%. Also sets the `token-efficient-tools-2025` beta header. |
 | **Pluggable Token Counter** *(new, v1.6.26)* | GPT-style BPE estimator by default; `setTokenizer()` lets you drop in `tiktoken` or a provider tokenizer for exact counts. Shared with MemOS so both projects count tokens identically. |
+| **AI Trio Memory Injection** *(v1.6.27)* | Pulls a token-budgeted memory slice from the memos (`@mem-os/sdk`) sibling repo and injects it as a high-relevance context shard. Activated automatically when MemOS env vars are set — no code change needed. |
+
+## AI Trio Memory Integration
+
+LLM-Guardian and [memos](https://github.com/Markgatcha/memos) (the AI Trio memory layer) compose at runtime. When enabled, the Guardian server builds a MemOS **TOON context pack** (60-90% smaller than JSON) for each request's user query and injects it ahead of the conversation, so the model sees grounded memory without re-deriving context from chat history.
+
+**Activation (env-gated, zero hard dependency):** set any of these on the Guardian server process and the integration turns on automatically. Without them, Guardian runs standalone — the `@mem-os/sdk` package is never imported and there is no overhead.
+
+| Env var | Purpose |
+|---|---|
+| `MEMOS_NAMESPACE` | MemOS namespace to query (e.g. `default`). Presence alone enables the integration. |
+| `MEMOS_STORAGE_PATH` | Path to the MemOS SQLite store (alternative to `MEMOS_NAMESPACE`). |
+| `MEMOS_EMBEDDING_PROVIDER` | Optional embedding provider URL. MemOS falls back to keyword search if omitted. |
+
+**Behavior:**
+- The pack is built **once per process** (MemOS `init()` is cached) and reused across requests.
+- Failures are **soft**: if `@mem-os/sdk` isn't installed or MemOS errors, the request proceeds without memory injection (a warning is logged) — it never 500s the request.
+- You can also supply a pack explicitly per request via `memory_pack` in the `/v1/chat/completions` body; an explicit pack overrides the auto-built one.
+- Surfaced in metrics as `memoryPackInjected` / `memoryPackTokens`.
+
+
 | **Cross-Model Fingerprinting** | Re-orders prompt components per model's attention biases (Claude 4.8, Gemini 3.1, GPT-5.5) |
 | **Tool Fusion** | Compresses multiple MCP tool-turns into a single semantic block |
 | **Privacy Shield** | PII redaction + prompt injection blocking (sub-millisecond) |

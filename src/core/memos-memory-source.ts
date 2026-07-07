@@ -6,15 +6,25 @@
 // high-relevance context shard.
 //
 // DECOUPLING: Guardian takes NO hard dependency on @mem-os/sdk. The package
-// is imported lazily (dynamic import) only when `buildMemoryPack()` is called,
+// is imported lazily (dynamic import) only when a pack is actually built,
 // so the rest of Guardian builds and runs fine without memos installed. This
 // keeps the two sibling repos independently publishable while still letting
 // them compose at runtime.
 //
-// Usage:
+// ACTIVATION: The server wires this in automatically when MemOS env vars are
+// present (MEMOS_NAMESPACE / MEMOS_STORAGE_PATH). Without them, the guardian
+// runs standalone — no memos import, no overhead. If memos is installed but
+// errors at request time, the pack build fails soft (request proceeds without
+// memory) rather than 500-ing.
+//
+// Usage (manual):
 //   const source = await createMemOSMemorySource({ namespace: "default" });
 //   const pack = await source.getPack("refactor vcm sharder", 1200);
 //   // → pass `pack` as `request.memoryPack` to orchestrate()
+//
+// Usage (server-side, automatic):
+//   const pack = await buildRequestMemoryPack(userQuery, 1200);
+//   // returns the TOON pack string, or null if memos isn't configured/available
 
 import { estimateTokens } from "./token-counter.ts";
 
@@ -129,4 +139,81 @@ export function estimatePackTokens(pack: string): number {
 	return estimateTokens(pack);
 }
 
-export default { createMemOSMemorySource, packToToon, estimatePackTokens };
+// ─── Server-side automatic wiring ────────────────────────────────────────────
+// A lazily-constructed, process-wide MemOS source. MemOS `init()` is expensive,
+// so we build it once and reuse it across requests. It only initializes when
+// MemOS env vars are present AND the package resolves, so standalone guardian
+// instances never pay for it.
+
+let cachedSource: MemoryPackSource | null = null;
+let sourceInitPromise: Promise<MemoryPackSource | null> | null = null;
+let memosDisabled = false;
+
+/**
+ * Resolve (and cache) the process-wide MemOS memory source. Returns null when
+ * MemOS isn't configured (no env vars) or can't be loaded — callers treat null
+ * as "no memory injection", never as a hard error.
+ */
+export function getMemoryPackSource(): Promise<MemoryPackSource | null> {
+	if (memosDisabled) return Promise.resolve(null);
+	if (cachedSource) return Promise.resolve(cachedSource);
+	if (sourceInitPromise) return sourceInitPromise;
+
+	const namespace = process.env.MEMOS_NAMESPACE;
+	const storagePath = process.env.MEMOS_STORAGE_PATH;
+	if (!namespace && !storagePath) {
+		// Not configured — stay standalone. Don't retry every request.
+		memosDisabled = true;
+		return Promise.resolve(null);
+	}
+
+	sourceInitPromise = createMemOSMemorySource({
+		namespace,
+		storagePath,
+		embeddingProvider: process.env.MEMOS_EMBEDDING_PROVIDER,
+	})
+		.then((source) => {
+			cachedSource = source;
+			return source;
+		})
+		.catch((err) => {
+			// memos isn't installed or failed to init — run without memory.
+			console.warn(
+				`[guardian] MemOS memory source unavailable, continuing without ` +
+					`memory injection: ${err instanceof Error ? err.message : String(err)}`,
+			);
+			memosDisabled = true;
+			sourceInitPromise = null;
+			return null;
+		});
+
+	return sourceInitPromise;
+}
+
+/**
+ * Build a MemOS TOON memory pack for the current request and return it as a
+ * ready-to-inject string. Returns null if memos isn't configured or errors —
+ * the caller proceeds without memory injection. This is the single integration
+ * point the server calls before orchestration.
+ *
+ * @param query        The user query used to retrieve relevant memories.
+ * @param tokenBudget  Target token budget for the retrieved pack.
+ */
+export async function buildRequestMemoryPack(
+	query: string,
+	tokenBudget: number,
+): Promise<string | null> {
+	const source = await getMemoryPackSource();
+	if (!source || !query.trim()) return null;
+	try {
+		return await source.getPack(query.trim(), tokenBudget);
+	} catch (err) {
+		console.warn(
+			`[guardian] MemOS pack build failed, continuing without memory: ` +
+				`${err instanceof Error ? err.message : String(err)}`,
+		);
+		return null;
+	}
+}
+
+export default { createMemOSMemorySource, packToToon, estimatePackTokens, getMemoryPackSource, buildRequestMemoryPack };
