@@ -239,6 +239,12 @@ export interface OptimizationMetrics {
 	shardingCompressionRatio?: number;
 	toolFusionApplied: boolean;
 	toolFusionTokensSaved?: number;
+	/** True if the Retain Pre-Filter dropped low-signal turns before folding. */
+	retainFilterApplied?: boolean;
+	/** Number of turns dropped by the Retain Pre-Filter. */
+	retainFilterDropped?: number;
+	/** Tokens saved by dropping low-signal turns up front. */
+	retainFilterTokensSaved?: number;
 	totalTokensSaved: number;
 	totalSavingsUsd: number;
 }

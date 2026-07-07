@@ -19,6 +19,7 @@ import type {
 	RequestEvent,
 } from "./types.ts";
 import { shardMessages } from "./vcm-sharder.ts";
+import { decideRetain } from "./retain-filter.ts";
 
 // ─── In-Memory Analytics Store ───────────────────────────────────────────────
 
@@ -101,6 +102,46 @@ export async function orchestrate(
 				...workingMessages[i],
 				content: sanitizeText(workingMessages[i].content),
 			};
+		}
+	}
+
+	// ── Step 1b: Retain Pre-Filter ────────────────────────────────────────────
+	// Drop low-signal turns (greetings, acknowledgements, restatements) BEFORE
+	// any folding/sharding runs. This is the cheapest optimization in the
+	// pipeline (sub-1ms local classifier, zero LLM calls) and prevents the
+	// expensive stages from wasting tokens + compute on fixed overhead. ~73%
+	// of agent turns are fixed overhead, so this fires often.
+	{
+		const filtered: typeof workingMessages = [];
+		let dropped = 0;
+		let tokensSaved = 0;
+		// Track entities seen so far so the classifier can score novelty
+		// (down-weights turns that only repeat known entities).
+		const seenEntities = new Set<string>();
+		for (const msg of workingMessages) {
+			// Never drop system messages — they carry essential instructions.
+			if (msg.role === "system") {
+				filtered.push(msg);
+				continue;
+			}
+			const verdict = decideRetain({ content: msg.content, seenEntities: [...seenEntities] });
+			if (verdict.retain) {
+				filtered.push(msg);
+				// Accumulate signal entities from kept turns for novelty scoring.
+				for (const m of msg.content.match(/`[^`]+`|(?:[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml))|https?:\/\/[^\\s,)]+|(?:GET|POST|PUT|DELETE|PATCH)\s+[\w/:-]+|(?:gpt-4(?:\.\d)?|gpt-5(?:\.\d)?|claude-(?:3\.\d|4\.\d)|gemini-(?:\d\.\d)|o[13]|llama|mistral|deepseek)|[\d.]+(?:%|ms|s|tok|tokens|usd|\$)/gi) ?? []) {
+					seenEntities.add(m.toLowerCase());
+				}
+			} else {
+				dropped++;
+				tokensSaved += estimateTokens(msg.content);
+			}
+		}
+		if (dropped > 0) {
+			workingMessages = filtered;
+			optimization.retainFilterApplied = true;
+			optimization.retainFilterDropped = dropped;
+			optimization.retainFilterTokensSaved = tokensSaved;
+			optimization.totalTokensSaved += tokensSaved;
 		}
 	}
 
@@ -255,6 +296,33 @@ export async function* orchestrateStream(
 		const scan = scanPII(msg.content);
 		if (scan.blocked)
 			throw new Error("Request blocked: prompt injection detected");
+	}
+
+	// Retain Pre-Filter (same local classifier as the non-streaming path)
+	{
+		const filtered: typeof workingMessages = [];
+		let dropped = 0;
+		let tokensSaved = 0;
+		for (const msg of workingMessages) {
+			if (msg.role === "system") {
+				filtered.push(msg);
+				continue;
+			}
+			const verdict = decideRetain({ content: msg.content });
+			if (verdict.retain) {
+				filtered.push(msg);
+			} else {
+				dropped++;
+				tokensSaved += estimateTokens(msg.content);
+			}
+		}
+		if (dropped > 0) {
+			workingMessages = filtered;
+			optimization.retainFilterApplied = true;
+			optimization.retainFilterDropped = dropped;
+			optimization.retainFilterTokensSaved = tokensSaved;
+			optimization.totalTokensSaved += tokensSaved;
+		}
 	}
 
 	// Folding

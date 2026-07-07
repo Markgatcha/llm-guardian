@@ -43,6 +43,10 @@ frontend/.vite/
 frontend/coverage/
 *.tsbuildinfo
 
+# ── Local runtime state ─────────────────────────────────────────────────────
+.guardian/
+nul
+
 # ── IDE / OS ────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
