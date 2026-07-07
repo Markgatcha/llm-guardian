@@ -86,7 +86,7 @@
   "dependencies": {
     "commander": "^12.1.0",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.15",
+    "hono": "^4.12.28",
     "nanoid": "^5.1.9",
     "openai": "^4.104.0",
     "zod": "^4.4.3"
