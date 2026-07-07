@@ -89,7 +89,7 @@
     "hono": "^4.12.15",
     "nanoid": "^5.1.9",
     "openai": "^4.104.0",
-    "zod": "^3.24.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.11",
