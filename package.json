@@ -92,15 +92,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-<<<<<<< HEAD
     "@biomejs/biome": "2.5.2",
-    "@biomejs/cli-linux-x64": "2.4.11",
-    "@types/bun": "^1.3.14",
-=======
-    "@biomejs/biome": "2.4.11",
     "@biomejs/cli-linux-x64": "2.5.2",
-    "@types/bun": "^1.3.12",
->>>>>>> bfd4517 (chore(deps-dev): bump @biomejs/cli-linux-x64 from 2.4.11 to 2.5.2)
+    "@types/bun": "^1.3.14",
     "typescript": "^6.0.3"
   }
 }
