@@ -135,9 +135,11 @@ function extractEntitiesFromMessage(content: string): ExtractedEntity[] {
 		}
 	}
 
-	// File paths
+	// File paths. The path prefix class intentionally excludes "." so the
+	// quantifier cannot overlap the extension's leading dot (avoids a
+	// polynomial-redos flagged by CodeQL js/polynomial-redos).
 	const filePaths = content.match(
-		/(?:\w[\w/-]*\.)+(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml)/g,
+		/(?:[\w/-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml))/g,
 	);
 	if (filePaths) {
 		for (const path of filePaths) {
