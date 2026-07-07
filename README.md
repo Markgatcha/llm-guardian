@@ -37,14 +37,29 @@ LLM-Guardian and [memos](https://github.com/Markgatcha/memos) (the AI Trio memor
 | Env var | Purpose |
 |---|---|
 | `MEMOS_NAMESPACE` | MemOS namespace to query (e.g. `default`). Presence alone enables the integration. |
-| `MEMOS_STORAGE_PATH` | Path to the MemOS SQLite store (alternative to `MEMOS_NAMESPACE`). |
+| `MEMOS_STORAGE_PATH` | Path to the MemOS SQLite DB file (maps to MemOS `dbPath`). Defaults to `~/.memos/memos.db`. |
 | `MEMOS_EMBEDDING_PROVIDER` | Optional embedding provider URL. MemOS falls back to keyword search if omitted. |
+
+**Linking memos locally (memos is not on npm):** symlink the sibling repo into Guardian's `node_modules` so the lazy `import("@mem-os/sdk")` resolves:
+
+```bash
+# from the llm-guardian repo root
+mkdir -p node_modules/@mem-os
+ln -s ../memos node_modules/@mem-os/sdk      # macOS/Linux
+# Windows (PowerShell):  New-Item -ItemType Junction -Path node_modules/@mem-os/sdk -Target ../memos
+```
+
+Then run Guardian with `MEMOS_NAMESPACE=default` (and optionally `MEMOS_STORAGE_PATH=~/.memos/memos.db`).
+
+**Runtime note — Bun vs Node:** MemOS stores memories in SQLite via `better-sqlite3`, a native Node module that **Bun does not support**. When memos-backed memory is enabled you must run the Guardian server under **Node** (e.g. `node --experimental-strip-types src/cli/index.ts`, or compile first), not Bun. Without memos configured, Guardian runs normally under Bun. To avoid the native-module/runtime coupling entirely, point Guardian at a running MemOS **HTTP/MCP server** instead of importing the SDK (see `memos serve` / `memos mcp`) — that path keeps Guardian on Bun.
 
 **Behavior:**
 - The pack is built **once per process** (MemOS `init()` is cached) and reused across requests.
 - Failures are **soft**: if `@mem-os/sdk` isn't installed or MemOS errors, the request proceeds without memory injection (a warning is logged) — it never 500s the request.
 - You can also supply a pack explicitly per request via `memory_pack` in the `/v1/chat/completions` body; an explicit pack overrides the auto-built one.
 - Surfaced in metrics as `memoryPackInjected` / `memoryPackTokens`.
+
+**Smoke test:** `node --experimental-strip-types scripts/smoke-memos.ts` (set `SMOKE_QUERY` to a term that matches your stored memories, e.g. `dark mode`).
 
 
 | **Cross-Model Fingerprinting** | Re-orders prompt components per model's attention biases (Claude 4.8, Gemini 3.1, GPT-5.5) |

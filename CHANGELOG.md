@@ -19,6 +19,13 @@ cross-repo AI Trio integration point with memos.
   request proceeds without memory) so standalone Guardian instances are
   unaffected. An explicit `memory_pack` in the request body overrides the
   auto-built pack.
+- **Local dev setup for the MemOS pack** — `memos-memory-source.ts` now passes
+  `dbPath` (was `storagePath`, which MemOS doesn't accept). Added
+  `scripts/smoke-memos.ts` (run under Node) that builds a real TOON pack from
+  `~/.memos/memos.db` and asserts it survives VCM sharding as the top shard.
+  README documents the symlink + the Bun/`better-sqlite3` runtime constraint
+  (memos-backed memory requires running Guardian under Node, or calling a
+  MemOS HTTP/MCP server).
 - **`request.memoryPack`** field on `GuardianRequest` — a pre-built, already
   compressed memory pack injected as a high-relevance context shard ahead of
   VCM Sharding. Surfaced in metrics as `memoryPackInjected` / `memoryPackTokens`.

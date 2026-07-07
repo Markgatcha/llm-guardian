@@ -32,7 +32,9 @@ import { estimateTokens } from "./token-counter.ts";
 export interface MemOSMemorySourceOptions {
 	/** MemOS namespace to query. Defaults to "default". */
 	namespace?: string;
-	/** Path to the memos SQLite store / config. Passed to MemOS init. */
+	/** Path to the memos SQLite store. Maps to MemOS `dbPath`. */
+	dbPath?: string;
+	/** Alias for `dbPath` (kept for backwards compatibility). */
 	storagePath?: string;
 	/** Embedding provider URL (optional; MemOS falls back to keyword search). */
 	embeddingProvider?: string;
@@ -63,7 +65,7 @@ export async function createMemOSMemorySource(
 	const { MemOS } = mod;
 
 	const memos = new MemOS({
-		storagePath: opts.storagePath,
+		dbPath: opts.dbPath ?? opts.storagePath,
 		embeddingProvider: opts.embeddingProvider,
 	});
 	await memos.init();
@@ -160,8 +162,8 @@ export function getMemoryPackSource(): Promise<MemoryPackSource | null> {
 	if (sourceInitPromise) return sourceInitPromise;
 
 	const namespace = process.env.MEMOS_NAMESPACE;
-	const storagePath = process.env.MEMOS_STORAGE_PATH;
-	if (!namespace && !storagePath) {
+	const dbPath = process.env.MEMOS_STORAGE_PATH;
+	if (!namespace && !dbPath) {
 		// Not configured — stay standalone. Don't retry every request.
 		memosDisabled = true;
 		return Promise.resolve(null);
@@ -169,7 +171,7 @@ export function getMemoryPackSource(): Promise<MemoryPackSource | null> {
 
 	sourceInitPromise = createMemOSMemorySource({
 		namespace,
-		storagePath,
+		dbPath,
 		embeddingProvider: process.env.MEMOS_EMBEDDING_PROVIDER,
 	})
 		.then((source) => {
