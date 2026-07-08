@@ -52,7 +52,7 @@ LLM-Guardian and [memos](https://github.com/Markgatcha/memos) (the AI Trio memor
 | `MEMOS_STORAGE_PATH` | Path to the MemOS SQLite DB file (maps to MemOS `dbPath`). Defaults to `~/.memos/memos.db`. |
 | `MEMOS_EMBEDDING_PROVIDER` | Optional embedding provider URL. MemOS falls back to keyword search if omitted. |
 
-**Linking memos locally (memos is not on npm):** symlink the sibling repo into Guardian's `node_modules` so the lazy `import("@mem-os/sdk")` resolves:
+**Linking memos locally:** the published `@mem-os/sdk` npm package is a stale pre-release that does not match the current source, so for the live integration clone the sibling repo and symlink it into Guardian's `node_modules` so the lazy `import("@mem-os/sdk")` resolves:
 
 ```bash
 # from the llm-guardian repo root
