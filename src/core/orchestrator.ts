@@ -12,6 +12,11 @@ import {
 } from "../providers/openrouter-adapter.ts";
 import { estimateTokens, foldMessages } from "./folding-engine.ts";
 import { fuseToolMessages } from "./tool-fuser.ts";
+import { gateTools } from "./tool-gater.ts";
+import {
+	structureForCaching,
+	shouldUseTokenEfficientTools,
+} from "./prompt-cache.ts";
 import type {
 	GuardianRequest,
 	GuardianResponse,
@@ -156,6 +161,23 @@ export async function orchestrate(
 		}
 	}
 
+	// ── Step 2b: Tool Gating (lazy tool-schema loading) ──────────────────────
+	// Filter the tool catalog down to the query-relevant subset BEFORE the
+	// schemas are sent to the provider. Zero-LLM-call, sub-millisecond. This is
+	// a form of prompt reduction, so it runs early — gated schemas mean fewer
+	// tokens folded/sharded and fewer output tokens the model reasons over.
+	let workingTools = request.tools;
+	{
+		const lastUserMsg =
+			workingMessages.filter((m) => m.role === "user").pop()?.content || "";
+		const gated = gateTools(request.tools, lastUserMsg, { maxTools: 8 });
+		if (gated.removed > 0) {
+			workingTools = gated.tools;
+			optimization.toolGatingApplied = true;
+			optimization.toolGatingRemoved = gated.removed;
+		}
+	}
+
 	// ── Step 3: Semantic Folding ──────────────────────────────────────────────
 	const originalPromptTokens = workingMessages.reduce(
 		(sum, m) => sum + estimateTokens(m.content),
@@ -223,6 +245,31 @@ export async function orchestrate(
 			shardResult.shardingResult.shardedTokens;
 	}
 
+	// ── Step 4b: Prompt Caching ───────────────────────────────────────────────
+	// Reorder into a stable cacheable prefix + volatile suffix and stamp
+	// Anthropic `cache_control` breakpoints on the prefix boundary. Also decide
+	// the token-efficient-tools beta header (worth it whenever tools exist).
+	// This is additive: if caching is disabled or the prefix is too small, the
+	// messages pass through unchanged.
+	let cachedMessages = workingMessages;
+	let useTokenEfficientTools = false;
+	{
+		const structured = structureForCaching(workingMessages, {
+			enableCaching: request.enablePromptCaching,
+		});
+		if (structured.cachingStructured) {
+			cachedMessages = structured.messages;
+			optimization.promptCachingApplied = true;
+			optimization.promptCachingPrefixTokens = structured.prefixTokens;
+		}
+		useTokenEfficientTools =
+			!!request.enablePromptCaching &&
+			shouldUseTokenEfficientTools(workingTools);
+		if (useTokenEfficientTools) {
+			optimization.tokenEfficientToolsUsed = true;
+		}
+	}
+
 	// ── Step 5: Model Selection & Budget Check ────────────────────────────────
 	const finalPromptTokens = workingMessages.reduce(
 		(sum, m) => sum + estimateTokens(m.content),
@@ -249,11 +296,12 @@ export async function orchestrate(
 	// ── Step 7: Execute Completion ────────────────────────────────────────────
 	const response = await complete({
 		model: selectedModel,
-		messages: workingMessages,
+		messages: cachedMessages,
 		temperature: request.temperature,
 		maxTokens: request.maxTokens,
 		stream: false,
-		tools: request.tools,
+		tools: workingTools,
+		tokenEfficientTools: useTokenEfficientTools,
 	});
 
 	// ── Step 8: Record Analytics ──────────────────────────────────────────────

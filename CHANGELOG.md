@@ -1,3 +1,40 @@
+# llm-guardian v1.6.28
+
+Wires the Tool Gating and Prompt Caching modules into the live optimization
+pipeline (they were previously present as standalone modules but not invoked
+by the orchestrator), and adds an end-to-end benchmark harness.
+
+## Added
+- **Orchestrator benchmark harness** (`scripts/bench-orchestrator.ts`, `bun run
+  bench:orchestrator`) — runs the full pipeline (retain pre-filter → tool
+  gating → semantic folding → VCM sharding → prompt caching) over a corpus of
+  realistic multi-turn agent conversations and reports end-to-end compression
+  ratio plus p50/p95/p99 latency. Includes a CI gate that fails if mean
+  compression drops below the stated floor or p99 latency exceeds the sub-30ms
+  budget. Writes `scripts/bench-orchestrator-results.json`.
+
+## Changed
+- **Tool Gating is now wired into the orchestration pipeline** — previously an
+  orphaned module. It runs as Step 2b (after tool fusion, before folding): the
+  tool catalog is filtered to the query-relevant subset (top 8 by term-overlap
+  relevance) so only relevant schemas are folded, sharded, and sent to the
+  provider. No-op for catalogs ≤ 8 tools. New metrics: `toolGatingApplied`,
+  `toolGatingRemoved`.
+- **Prompt Caching is now wired into the orchestration pipeline** — runs as
+  Step 4b (after sharding, before model selection): the conversation is
+  reordered into a stable cacheable prefix + volatile suffix and stamped with
+  Anthropic `cache_control` breakpoints when the prefix ≥ 1024 tokens. The
+  `token-efficient-tools-2025` beta header is attached whenever tools are
+  present and caching is enabled. New metrics: `promptCachingApplied`,
+  `promptCachingPrefixTokens`, `tokenEfficientToolsUsed`.
+- **HTTP API + CLI** now accept `enable_tool_gating` / `enable_prompt_caching`
+  (default on) on `/v1/chat/completions`, and the values flow through
+  `GuardianRequest` → `complete()` → provider headers.
+
+## Fixed
+- `complete()` / `completeStream()` (OpenRouter adapter) now honor the
+  `tokenEfficientTools` request flag and attach the beta header when set.
+
 # llm-guardian v1.6.27
 
 Performance + integration release: activates the Retain Pre-Filter end-to-end and

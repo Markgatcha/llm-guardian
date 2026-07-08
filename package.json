@@ -78,6 +78,7 @@
     "dev": "bun --watch src/cli/index.ts start server",
     "build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js",
     "bench": "bun run scripts/bench-v1626-modules.ts",
+    "bench:orchestrator": "bun run scripts/bench-orchestrator.ts",
     "test": "bun test",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit",

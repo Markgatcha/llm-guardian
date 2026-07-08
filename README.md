@@ -22,7 +22,7 @@ LLM-Guardian is one of three sibling projects that compose into a complete agent
 | **[memos](https://github.com/Markgatcha/memos)** | Graph-based persistent memory across agent sessions |
 | **[llm-guardian](https://github.com/Markgatcha/llm-guardian)** | Token-cost guardian that compresses prompts and injects MemOS memory slices |
 
-Together they cover transport + tools (UMT), memory + persistence (MemOS), and LLM inference cost control (llm-guardian). LLM-Guardian pulls token-budgeted memory slices from MemOS and injects them ahead of the conversation, and routes tool calls through UMT's MCP servers.
+Together they cover transport + tools (UMT), memory + persistence (MemOS), and LLM inference cost control (llm-guardian). LLM-Guardian pulls token-budgeted memory slices from MemOS and injects them ahead of the conversation, and compresses tool schemas (Tool Gating) before the model invokes the MCP servers hosted by UMT. The three compose at the agent layer: UMT serves the tools, MemOS supplies memory, and Guardian optimizes the tokens that flow between them.
 
 ---
 

@@ -131,14 +131,21 @@ export async function complete(
 	if (request.stream !== undefined) body.stream = request.stream;
 	if (request.tools !== undefined) body.tools = request.tools;
 
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		Authorization: `Bearer ${apiKey}`,
+		"HTTP-Referer": "https://llm-guardian.dev",
+		"X-Title": "LLM Guardian",
+	};
+	// Token-efficient tools beta: compacts tool definitions/outputs for
+	// 14-70% output-token savings when the catalog is large.
+	if (request.tokenEfficientTools) {
+		headers["anthropic-beta"] = "token-efficient-tools-2025";
+	}
+
 	const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${apiKey}`,
-			"HTTP-Referer": "https://llm-guardian.dev",
-			"X-Title": "LLM Guardian",
-		},
+		headers,
 		body: JSON.stringify(body),
 	});
 
@@ -203,14 +210,21 @@ export async function* completeStream(
 	if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens;
 	if (request.tools !== undefined) body.tools = request.tools;
 
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		Authorization: `Bearer ${apiKey}`,
+		"HTTP-Referer": "https://llm-guardian.dev",
+		"X-Title": "LLM Guardian",
+	};
+	// Token-efficient tools beta: compacts tool definitions/outputs for
+	// 14-70% output-token savings when the catalog is large.
+	if (request.tokenEfficientTools) {
+		headers["anthropic-beta"] = "token-efficient-tools-2025";
+	}
+
 	const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${apiKey}`,
-			"HTTP-Referer": "https://llm-guardian.dev",
-			"X-Title": "LLM Guardian",
-		},
+		headers,
 		body: JSON.stringify(body),
 	});
 

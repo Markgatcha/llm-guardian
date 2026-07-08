@@ -194,6 +194,18 @@ export interface GuardianRequest {
 	/** Enable Tool Fusion */
 	enableToolFusion?: boolean;
 	/**
+	 * Enable Tool Gating (lazy tool-schema loading): filters the tool catalog
+	 * down to the query-relevant subset before schemas are sent to the model.
+	 * Zero-LLM-call, sub-millisecond. No-op for catalogs <= 8 tools.
+	 */
+	enableToolGating?: boolean;
+	/**
+	 * Enable Prompt Caching: reorders the conversation into a stable cacheable
+	 * prefix and stamps Anthropic `cache_control` breakpoints, plus the
+	 * `token-efficient-tools-2025` beta header when tools are present.
+	 */
+	enablePromptCaching?: boolean;
+	/**
 	 * Pre-built memory pack (e.g. a MemOS TOON context pack) to inject as a
 	 * high-relevance context shard during VCM Sharding. This is the AI Trio
 	 * integration point: llm-guardian consumes a token-budgeted memory slice
@@ -254,6 +266,16 @@ export interface OptimizationMetrics {
 	shardingCompressionRatio?: number;
 	toolFusionApplied: boolean;
 	toolFusionTokensSaved?: number;
+	/** True if Tool Gating filtered the catalog before the call. */
+	toolGatingApplied?: boolean;
+	/** Number of tool schemas dropped by Tool Gating. */
+	toolGatingRemoved?: number;
+	/** True if Prompt Caching structured the prefix + set cache breakpoints. */
+	promptCachingApplied?: boolean;
+	/** Token count of the stable cacheable prefix (Prompt Caching). */
+	promptCachingPrefixTokens?: number;
+	/** True if the token-efficient-tools beta header was attached. */
+	tokenEfficientToolsUsed?: boolean;
 	/** True if the Retain Pre-Filter dropped low-signal turns before folding. */
 	retainFilterApplied?: boolean;
 	/** Number of turns dropped by the Retain Pre-Filter. */
@@ -284,6 +306,8 @@ export interface CompletionRequest {
 	maxTokens?: number;
 	stream?: boolean;
 	tools?: ToolDefinition[];
+	/** Attach the token-efficient-tools-2025 beta header (compact tool schemas). */
+	tokenEfficientTools?: boolean;
 }
 
 export interface CompletionResponse {

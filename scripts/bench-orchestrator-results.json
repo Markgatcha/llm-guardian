@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-07-08T19:27:05.078Z",
+  "samples": 200,
+  "latencyBudgetMs": 30,
+  "minCompressionRatio": 1.5,
+  "meanCompressionRatio": 1.799,
+  "meanP95LatencyMs": 0.557,
+  "meanP99LatencyMs": 1.012,
+  "perConversation": [
+    {
+      "originalTokens": 220,
+      "finalTokens": 145,
+      "compressionRatio": 1.517,
+      "p50Ms": 0.298,
+      "p95Ms": 0.665,
+      "p99Ms": 1.332
+    },
+    {
+      "originalTokens": 179,
+      "finalTokens": 86,
+      "compressionRatio": 2.081,
+      "p50Ms": 0.241,
+      "p95Ms": 0.449,
+      "p99Ms": 0.691
+    }
+  ]
+}

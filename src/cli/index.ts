@@ -93,6 +93,8 @@ program
 					enableFolding: body.enable_folding ?? true,
 					enableSharding: body.enable_sharding ?? true,
 					enableToolFusion: body.enable_tool_fusion ?? true,
+					enableToolGating: body.enable_tool_gating ?? true,
+					enablePromptCaching: body.enable_prompt_caching ?? true,
 					memoryPack,
 				};
 
