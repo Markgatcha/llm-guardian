@@ -1,6 +1,6 @@
 # LLM-Guardian v1.6.26
 
-[![npm version](https://img.shields.io/badge/npm-coming%20soon-lightgrey?logo=npm)](https://www.npmjs.com/package/llm-guardian)
+[![npm version](https://img.shields.io/npm/v/llm-guardian?logo=npm&color=cb3837)](https://www.npmjs.com/package/llm-guardian)
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Glama](https://img.shields.io/badge/Glama-coming%20soon-lightgrey)](https://glama.ai)
@@ -377,32 +377,73 @@ Guardian does not write provider secrets into tracked files. Set `OPENROUTER_API
 
 ## Local Providers
 
-Guardian can route to local OpenAI-compatible runtimes without fake API keys. Use a provider-prefixed model ID so the router knows which local endpoint should receive the request.
+Guardian routes to local OpenAI-compatible runtimes (LM Studio, Ollama,
+llama.cpp, vLLM, LocalAI) with **no API key** and **$0 cost**. The
+`openrouter-adapter` already speaks the OpenAI `/chat/completions`
+wire format, so a local runtime is just a different `baseUrl` with the
+auth check skipped.
 
-| Provider ID | Default endpoint | Example model |
-|---|---|---|
-| `local` | `http://127.0.0.1:8080/v1` | `local/local-model` |
-| `ollama` | `http://127.0.0.1:11434/v1` | `ollama/llama3.2` |
-| `llama-cpp` | `http://127.0.0.1:8080/v1` | `llama-cpp/local-model` |
-| `lmstudio` | `http://127.0.0.1:1234/v1` | `lmstudio/local-model` |
+Start the Guardian server pointed at your local runtime:
 
 ```bash
-guardian auth ollama --validate
-guardian run "summarize this repo" --model ollama/llama3.2
-guardian auth llama-cpp --validate
-guardian run "review this diff" --model llama-cpp/local-model
+# LM Studio (default local server port 1234)
 lms server start
 lms load google/gemma-4-e2b -y --identifier google/gemma-4-e2b
-guardian run "Reply with LOCAL_AI_OK only." --model lmstudio/google/gemma-4-e2b
+bun run src/cli/index.ts start --lm-studio --port 3000
+
+# Any other OpenAI-compatible runtime on a custom port
+bun run src/cli/index.ts start --base-url http://127.0.0.1:8081/v1 --port 3000
 ```
 
-Validation checks the local `/models` endpoint. Cloud provider keys are still supported, but local providers are intentionally marked no-key so Ollama, llama.cpp, LM Studio, vLLM, and LocalAI can run offline.
+Then send requests normally — use the **exact model id** your runtime
+reports at `/v1/models` as the `model` field. Guardian optimizes the
+prompt (retain → fold → shard) and forwards it to the local model:
 
-Set `GUARDIAN_OLLAMA_BASE_URL`, `GUARDIAN_LLAMA_CPP_BASE_URL`, `GUARDIAN_LMSTUDIO_BASE_URL`, or `GUARDIAN_LOCAL_BASE_URL` when your local OpenAI-compatible endpoint is not on the default port. Use the OpenAI-compatible `/v1` base URL, for example `http://127.0.0.1:8081/v1`.
+```bash
+curl http://127.0.0.1:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"google/gemma-4-e2b","messages":[{"role":"user","content":"Hello"}]}'
+```
 
-OpenAI-compatible local providers support non-streaming and streaming Guardian requests. Use the exact model ID returned by the local `/models` endpoint; the Gemma command above is only a smoke-test example when that model is loaded in LM Studio.
+Notes:
+- `--lm-studio` is shorthand for `--base-url http://127.0.0.1:1234/v1` with no key. `--local` is the no-key alias for any `--base-url`.
+- Local models are auto-detected as no-key: any `localhost` / `127.0.0.1` base URL skips the API-key requirement.
+- Cost math uses a zero-cost `local/auto` fingerprint, so `cost_usd` reports `$0` and the budget gate never trips.
+- Reasoning models (e.g. Gemma 4 E2B/E4B) emit chain-of-thought by default. Pass `--no-reasoning` (or set `GUARDIAN_REASONING=none`) so the local model answers directly — ~6x faster and deterministic, which is what you want for a fast local tuning loop. The `reasoning` field is also passed through per-call via the adapter.
 
 ---
+
+## Benchmarking Folding & Sharding (without losing accuracy)
+
+The bundled benchmarks prove the optimizer preserves **context and answer
+quality**, not just token counts:
+
+| Script | What it proves | Needs a model? |
+|---|---|---|
+| `bun run bench:context-loss` | **Fact retention** — declared ground-truth facts survive the real pipeline (retain → fold → shard). 100% expected. Model-free. | No |
+| `bun run bench:quality` | **Answer fidelity** — same conversation sent raw vs. optimized to a local model; the gate is the *delta* (optimizing must not lower recall). | Yes (local model) |
+| `bun run bench:orchestrator` | Size + latency of the pipeline only (existing). | No |
+
+```bash
+# Offline: confirm no facts are dropped
+bun run bench:context-loss
+
+# Online: confirm optimizing does not degrade answers (vs your local Gemma)
+# reasoning OFF (fast + deterministic, matches the local model's native mode)
+MODEL=google/gemma-4-e2b BASE_URL=http://127.0.0.1:1234/v1 \
+  MAX_TOKENS=400 GUARDIAN_REASONING=none bun run bench:quality
+```
+
+`bench:quality` reports `worstDeltaRecall` (must stay ≥ −5pp) and
+`meanAnswerF1`. Absolute recall depends on the local model's own
+strength; the guarantee Guardian makes is that **optimizing does not make
+it worse**. It runs N trials per arm (env `TRIALS`, default 3) and
+compares the mean, because local reasoning models are non-deterministic
+even at temperature 0. One task uses a 3000+ token conversation so
+folding AND sharding actually fire (they gate at >1000 / >2000
+tokens) — the real compression path, not just the retain filter.
+
+
 
 ## Direct Provider Support
 
