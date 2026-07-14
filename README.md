@@ -1,6 +1,6 @@
 # LLM-Guardian v1.6.26
 
-[![npm version](https://img.shields.io/badge/npm-coming%20soon-lightgrey?logo=npm)](https://www.npmjs.com/package/llm-guardian)
+[![npm version](https://img.shields.io/npm/v/llm-guardian?logo=npm&color=cb3837)](https://www.npmjs.com/package/llm-guardian)
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Glama](https://img.shields.io/badge/Glama-coming%20soon-lightgrey)](https://glama.ai)
