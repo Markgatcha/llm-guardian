@@ -363,7 +363,7 @@ Daily-driver polish commands include `/terminal-setup` for Windows Terminal and 
 ## Quickstart
 
 ```bash
-cd C:\Users\marki\llm-guardian
+cd <path-to-llm-guardian>
 guardian setup --dry-run
 guardian setup --profile ask --model auto
 guardian doctor --json
