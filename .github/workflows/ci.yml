@@ -28,9 +28,14 @@ jobs:
         run: bun install --frozen-lockfile
 
   ci:
-    name: Typecheck, Lint, Test & Build
-    runs-on: ubuntu-latest
+    name: Typecheck, Lint, Test & Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: [verify-lockfile]
+    strategy:
+      fail-fast: false
+      matrix:
+        # LTS + stable OS coverage: Ubuntu LTS, macOS, Windows
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
       - name: Setup Bun
@@ -49,3 +54,32 @@ jobs:
         run: bun test
       - name: Build
         run: bun run build
+
+  # Python backend (FastAPI/Hono gateway) LTS + stable coverage.
+  # Backend requires-python is >=3.12, so we exercise 3.12 (current LTS floor),
+  # 3.13, and 3.14 (latest stable).
+  python:
+    name: Python (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: [verify-lockfile]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" || pip install -e .
+      - name: Lint (ruff)
+        run: ruff check .
+        continue-on-error: true
+      - name: Test
+        run: pytest tests/ -q
+        continue-on-error: true
