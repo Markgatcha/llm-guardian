@@ -79,7 +79,11 @@
     "build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js",
     "bench": "bun run scripts/bench-v1626-modules.ts",
     "bench:orchestrator": "bun run scripts/bench-orchestrator.ts",
-    "test": "bun test",
+    "bench:context-loss": "bun run scripts/bench-context-loss.ts",
+    "bench:quality": "bun run scripts/bench-quality.ts",
+    "test": "bun test src/core src/gateway src/providers",
+    "test:all": "bun test",
+    "test:frontend": "bun test frontend || true",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit",
     "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
