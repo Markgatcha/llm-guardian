@@ -52,6 +52,8 @@ jobs:
         run: bun run lint
       - name: Test
         run: bun test
+      - name: Frontend tests
+        run: cd frontend && bun install --frozen-lockfile && bun run test
       - name: Build
         run: bun run build
 

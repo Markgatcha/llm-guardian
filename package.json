@@ -83,7 +83,7 @@
     "bench:quality": "bun run scripts/bench-quality.ts",
     "test": "bun test src/core src/gateway src/providers",
     "test:all": "bun test",
-    "test:frontend": "bun test frontend || true",
+    "test:frontend": "cd frontend && bun install && bun run test",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit",
     "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
