@@ -83,7 +83,7 @@
     "bench:quality": "bun run scripts/bench-quality.ts",
     "test": "bun test src/core src/gateway src/providers",
     "test:all": "bun test",
-    "test:frontend": "cd frontend && bun install --frozen-lockfile && bunx vitest run --config ./vite.config.ts --root .",
+    "test:frontend": "(cd frontend && bun install --frozen-lockfile) && (cd frontend && ./node_modules/.bin/vitest run --config ./vite.config.ts --root .)",
     "lint": "bunx biome check src/",
     "typecheck": "bunx tsc --noEmit",
     "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
