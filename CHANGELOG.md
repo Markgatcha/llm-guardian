@@ -1,3 +1,17 @@
+# llm-guardian v1.6.30
+
+CI minute optimization and dependency updates.
+
+## CI
+
+- **CI minute optimization** — removed the rolling Node smoke job (was `continue-on-error`, consumed minutes without blocking releases), reduced Python from 3 to 2 versions (3.12 LTS, 3.13). Pinned `bun-version` to `1.3.14` (stable) in `release.yml` — `latest` resolves to canary which breaks lockfileVersion compatibility.
+
+## Dependencies
+
+- `@biomejs/biome` 2.5.3 → 2.5.5
+- `@biomejs/cli-linux-x64` 2.5.3 → 2.5.5
+- Frontend: `postcss` 8.5.20 → 8.5.21, `react`/`react-dom` 19.2.7 → 19.2.8
+
 # llm-guardian v1.6.29
 
 Local-model support plus two benchmark harnesses that prove the optimizer
