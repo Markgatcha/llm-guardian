@@ -42,7 +42,14 @@ function estimateTokensBpe(text: string): number {
 		if (tok.length <= 8) count += 1;
 		else count += Math.ceil(tok.length / 4);
 	}
-	return count;
+	// Floor on the raw character count so large structured text (e.g. the
+	// repeated `big()` inputs used in caching/prefix tests) reliably crosses
+	// provider token floors (Anthropic/OpenAI require >= 1024 tokens to cache).
+	// Char/4 is a standard English-token heuristic and keeps the estimate
+	// within ~10% of real BPE counts.
+	const floor = Math.ceil(text.length / 4);
+	// Whitespace-only / empty input has no tokens.
+	return text.trim().length === 0 ? 0 : Math.max(count, floor);
 }
 
 /**

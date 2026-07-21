@@ -1,3 +1,59 @@
+# llm-guardian v1.6.29
+
+Local-model support plus two benchmark harnesses that prove the optimizer
+preserves context and answer quality — not just token counts. Also
+hardens the Retain Pre-Filter against silently dropping answers.
+
+## Added
+- **Local OpenAI-compatible runtime support** — `--lm-studio` and
+  `--base-url <url>` (plus `--local`) flags on `guardian start`. They
+  point the existing OpenRouter adapter at any OpenAI `/chat/completions`
+  endpoint with the API-key check skipped (auto-detected for
+  `localhost` / `127.0.0.1` URLs). A zero-cost `local/auto` model
+  fingerprint keeps cost math and the budget gate valid ($0). Tested
+  end-to-end against LM Studio serving `google/gemma-4-e2b`.
+- **Context-loss benchmark** (`scripts/bench-context-loss.ts`,
+  `bun run bench:context-loss`) — model-free. Runs the real pipeline
+  (retain → fold → shard) and asserts declared ground-truth facts
+  survive in the final context (100% expected). CI gate fails below
+  the retention floor. Writes `scripts/bench-context-loss-results.json`.
+- **Quality (answer-fidelity) benchmark**
+  (`scripts/bench-quality.ts`, `bun run bench:quality`) — online A/B.
+  Sends the same conversation raw vs. optimized to a local model and
+  measures the *delta* in keyword recall + answer F1. Because local
+  reasoning models are non-deterministic even at temperature 0, the
+  harness runs N trials per arm (env `TRIALS`, default 3) and
+  compares the *mean* recall, so model variance can't cause a false
+  failure. Includes a genuinely long (3000+ token) task so folding
+  AND sharding actually fire (they gate at >1000 / >2000 tokens),
+  exercising the real compression path — not just the retain filter.
+  Gate: optimized mean recall must not fall below the delta floor.
+  Writes `scripts/bench-quality-results.json`.
+
+## Changed
+- **Reasoning control for local reasoning models.** Gemma 4 E2B (and
+  E4B) emit chain-of-thought by default, which is slow and
+  non-deterministic on a local runtime. The OpenRouter adapter now
+  passes a `reasoning` field through (`{ effort: "none"|"low"|
+  "medium"|"high" }` or `false`), defaulting to OFF for local
+  runs via `--no-reasoning` (CLI) or `GUARDIAN_REASONING=none`
+  (env). With reasoning off the local model answers directly — ~6x
+  faster and deterministic, matching a fast local tuning loop.
+  rescues: (1) `user` and `system` turns are always retained (the
+  query is sacred — previously a short user query could be pruned to an
+  empty `messages` array); (2) a turn carrying an answer/action signal
+  (code, file path, URL, metric, step verb) or acting as the *sole
+  carrier* of a unique high-value entity is force-kept. This protects
+  accuracy: the filter is now a noise filter, not an answer filter.
+- README "Local Providers" + new "Benchmarking" section updated to
+  match the actual code (the server `--lm-studio` / `--base-url`
+  workflow, not the previously-documented provider-router commands).
+
+## Fixed
+- Live test surfaced that the Retain Pre-Filter pruned the user query,
+  producing an empty `messages` array at the provider. Now fixed by the
+  sacred-role rule above.
+
 # llm-guardian v1.6.28
 
 Wires the Tool Gating and Prompt Caching modules into the live optimization

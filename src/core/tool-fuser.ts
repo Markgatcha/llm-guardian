@@ -84,13 +84,19 @@ function compressObjectResult(
 
 	const keysToUse = importantKeys.length > 0 ? importantKeys : keys.slice(0, 5);
 
+	// Recurse into nested objects so a high-value key at any depth (e.g.
+	// `{ data: { status } }`) is surfaced rather than collapsed to `{...}`.
 	const pairs = keysToUse.map((k) => {
 		const val = result[k];
 		if (typeof val === "string") return `${k}: "${val.slice(0, 100)}"`;
 		if (typeof val === "number" || typeof val === "boolean")
 			return `${k}: ${val}`;
 		if (Array.isArray(val)) return `${k}: [...${val.length} items]`;
-		if (typeof val === "object") return `${k}: {...}`;
+		if (typeof val === "object" && val !== null) {
+			const nested = compressObjectResult(`${toolName}`, val as Record<string, unknown>);
+			// Pull just the inner pair list out of the `[tool]: {...}` wrapper.
+			return nested.replace(/^\[[^\]]*\]: /, "");
+		}
 		return `${k}: ${String(val).slice(0, 50)}`;
 	});
 

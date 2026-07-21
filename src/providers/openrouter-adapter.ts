@@ -1,5 +1,8 @@
 // OpenRouter Adapter — Unified API Connector
-// Single adapter for routing to any model through OpenRouter
+// Single adapter for routing to any OpenAI-compatible /chat/completions
+// endpoint. Works against OpenRouter by default, and against local runtimes
+// (LM Studio, Ollama, llama.cpp, vLLM, LocalAI) when configured with a
+// local base URL and skipAuth — the wire format is identical.
 
 import type {
 	CompletionRequest,
@@ -15,10 +18,43 @@ const BASE_DELAY_MS = 500;
 
 let apiKey = process.env.OPENROUTER_API_KEY || "";
 let baseUrl = OPENROUTER_BASE_URL;
+// When true, no API key is required and the Authorization header is omitted.
+// Used for local OpenAI-compatible runtimes (LM Studio, Ollama, llama.cpp).
+let skipAuth = false;
 
-export function configure(opts: { apiKey?: string; baseUrl?: string }): void {
-	if (opts.apiKey) apiKey = opts.apiKey;
+// Default reasoning control for ALL calls via this adapter. Local reasoning
+// models (e.g. Gemma 4 E2B on LM Studio) emit chain-of-thought by
+// default, which is slow and non-deterministic; disable it for fast, stable
+// local runs. Override per-call via CompletionRequest.reasoning.
+// Env GUARDIAN_REASONING: "none"|"off" (default for local) | "low" |
+// "medium" | "high" | "on". "on"/unset keeps the provider default.
+type ReasoningSetting = { effort: "none" | "low" | "medium" | "high" } | false;
+function parseReasoningEnv(): ReasoningSetting | undefined {
+	const raw = (process.env.GUARDIAN_REASONING || "").toLowerCase();
+	if (raw === "none" || raw === "off") return { effort: "none" };
+	if (raw === "low") return { effort: "low" };
+	if (raw === "medium") return { effort: "medium" };
+	if (raw === "high") return { effort: "high" };
+	if (raw === "on" || raw === "") return undefined;
+	return undefined;
+}
+let defaultReasoning: ReasoningSetting | undefined = parseReasoningEnv();
+// Base URLs that are treated as local runtimes and therefore don't need auth.
+const LOCAL_HOST_RE =
+	/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?/i;
+
+export function configure(opts: {
+	apiKey?: string;
+	baseUrl?: string;
+	skipAuth?: boolean;
+	/** Default reasoning control for all calls (per-call overrides). */
+	reasoning?: ReasoningSetting | false;
+}): void {
+	if (opts.apiKey !== undefined) apiKey = opts.apiKey;
 	if (opts.baseUrl) baseUrl = opts.baseUrl;
+	// Explicit override, or auto-detect a local base URL (no key needed).
+	skipAuth = !!opts.skipAuth || LOCAL_HOST_RE.test(baseUrl);
+	if (opts.reasoning !== undefined) defaultReasoning = opts.reasoning;
 }
 
 // ─── Retry Helper ────────────────────────────────────────────────────────────
@@ -32,15 +68,13 @@ async function fetchWithRetry(
 	for (let attempt = 0; attempt < retries; attempt++) {
 		try {
 			const response = await fetch(url, init);
-			if (
-				response.ok ||
-				(response.status >= 400 &&
-					response.status < 500 &&
-					response.status !== 429)
-			) {
+			// Client errors (4xx) are not retryable — surface them so the
+			// caller can format a meaningful error (e.g. "OpenRouter API error
+			// 429"). Only 5xx and network failures are retried.
+			if (response.ok || (response.status >= 400 && response.status < 500)) {
 				return response;
 			}
-			// 429 or 5xx — retry
+			// 5xx — retry
 			lastError = new Error(`HTTP ${response.status}`);
 		} catch (err) {
 			lastError = err instanceof Error ? err : new Error(String(err));
@@ -67,9 +101,12 @@ export function selectModel(
 		return requestedModel;
 	}
 
-	// Auto-select the cheapest capable model
+	// Auto-select the cheapest capable model. Exclude local-runtime stubs
+	// (modelName starts with "local/") — `router:auto` routes to a real remote
+	// model, never the zero-cost local placeholder.
 	const candidates = Array.from(getModelFingerprints().values()).filter(
 		(fp) => {
+			if (fp.modelName.startsWith("local/")) return false;
 			if (options.needsVision && !fp.supportsVision) return false;
 			if (options.needsStreaming && !fp.supportsStreaming) return false;
 			if (options.maxTokens && options.maxTokens > fp.maxOutputTokens)
@@ -110,9 +147,9 @@ function getModelFingerprints(): Map<
 export async function complete(
 	request: CompletionRequest,
 ): Promise<CompletionResponse> {
-	if (!apiKey) {
+	if (!apiKey && !skipAuth) {
 		throw new Error(
-			"OpenRouter API key not configured. Set OPENROUTER_API_KEY or call configure()",
+			"OpenRouter API key not configured. Set OPENROUTER_API_KEY, call configure({ apiKey }), or use a local runtime via configure({ skipAuth: true, baseUrl }).",
 		);
 	}
 
@@ -130,10 +167,13 @@ export async function complete(
 	if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens;
 	if (request.stream !== undefined) body.stream = request.stream;
 	if (request.tools !== undefined) body.tools = request.tools;
+	// Reasoning control: per-call overrides the adapter default.
+	const reasoning = request.reasoning ?? defaultReasoning;
+	if (reasoning) body.reasoning = reasoning;
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
-		Authorization: `Bearer ${apiKey}`,
+		...(skipAuth ? {} : { Authorization: `Bearer ${apiKey}` }),
 		"HTTP-Referer": "https://llm-guardian.dev",
 		"X-Title": "LLM Guardian",
 	};
@@ -155,7 +195,6 @@ export async function complete(
 	}
 
 	const data = (await response.json()) as Record<string, unknown>;
-
 	const choices = (data.choices as Array<Record<string, unknown>>) || [];
 	const firstChoice = choices[0] || {};
 	const message = (firstChoice.message as Record<string, unknown>) || {};
@@ -193,7 +232,7 @@ export async function complete(
 export async function* completeStream(
 	request: CompletionRequest,
 ): AsyncGenerator<string, CompletionResponse> {
-	if (!apiKey) {
+	if (!apiKey && !skipAuth) {
 		throw new Error("OpenRouter API key not configured.");
 	}
 
@@ -209,10 +248,12 @@ export async function* completeStream(
 	if (request.temperature !== undefined) body.temperature = request.temperature;
 	if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens;
 	if (request.tools !== undefined) body.tools = request.tools;
+	const reasoning = request.reasoning ?? defaultReasoning;
+	if (reasoning) body.reasoning = reasoning;
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
-		Authorization: `Bearer ${apiKey}`,
+		...(skipAuth ? {} : { Authorization: `Bearer ${apiKey}` }),
 		"HTTP-Referer": "https://llm-guardian.dev",
 		"X-Title": "LLM Guardian",
 	};

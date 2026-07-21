@@ -22,6 +22,8 @@ export interface EntityHeadline {
 export interface FoldingResult {
 	/** The compressed prompt ready for LLM submission */
 	foldedPrompt: string;
+	/** Token count of the folded prompt (top-level mirror of metadata.foldedTokens) */
+	foldedTokens: number;
 	/** Metadata about the folding process */
 	metadata: EntityHeadline;
 	/** Estimated USD saved by folding */
@@ -308,6 +310,13 @@ export interface CompletionRequest {
 	tools?: ToolDefinition[];
 	/** Attach the token-efficient-tools-2025 beta header (compact tool schemas). */
 	tokenEfficientTools?: boolean;
+	/**
+	 * Reasoning / chain-of-thought control, passed through to the provider.
+	 * Use `{ effort: "none" }` (or `false`) to disable CoT on reasoning
+	 * models so they answer directly — faster and deterministic. Honored by
+	 * local runtimes (LM Studio) and OpenRouter's reasoning models.
+	 */
+	reasoning?: { effort?: "none" | "low" | "medium" | "high" } | false;
 }
 
 export interface CompletionResponse {

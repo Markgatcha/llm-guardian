@@ -129,7 +129,7 @@ export async function orchestrate(
 				filtered.push(msg);
 				continue;
 			}
-			const verdict = decideRetain({ content: msg.content, seenEntities: [...seenEntities] });
+			const verdict = decideRetain({ content: msg.content, role: msg.role, seenEntities: [...seenEntities] });
 			if (verdict.retain) {
 				filtered.push(msg);
 				// Accumulate signal entities from kept turns for novelty scoring.
@@ -388,7 +388,7 @@ export async function* orchestrateStream(
 				filtered.push(msg);
 				continue;
 			}
-			const verdict = decideRetain({ content: msg.content });
+			const verdict = decideRetain({ content: msg.content, role: msg.role });
 			if (verdict.retain) {
 				filtered.push(msg);
 			} else {

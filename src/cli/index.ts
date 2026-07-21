@@ -35,13 +35,48 @@ program
 	.option("-k, --api-key <key>", "OpenRouter API key")
 	.option("--daily-budget <usd>", "Daily budget limit in USD", "50")
 	.option("--monthly-budget <usd>", "Monthly budget limit in USD", "500")
+	.option(
+		"--base-url <url>",
+		"Base URL for the chat/completions endpoint (any OpenAI-compatible). Use for local runtimes.",
+	)
+	.option(
+		"--lm-studio",
+		"Alias for --base-url http://127.0.0.1:1234/v1 with no API key (LM Studio local server).",
+	)
+	.option(
+		"--local",
+		"Alias for a local OpenAI-compatible runtime: skip the API key check.",
+	)
+	.option(
+		"--no-reasoning",
+		"Disable chain-of-thought on reasoning models (faster, deterministic). Sets GUARDIAN_REASONING=none; the local model answers directly.",
+	)
 	.action(async (opts) => {
 		const port = parseInt(opts.port, 10);
 
 		// Configure subsystems
-		if (opts.apiKey || process.env.OPENROUTER_API_KEY) {
+		const useLocal = !!(opts.lmStudio || opts.local || opts.baseUrl);
+		const resolvedBaseUrl = opts.lmStudio
+			? "http://127.0.0.1:1234/v1"
+			: opts.baseUrl || undefined;
+		const resolvedApiKey =
+			opts.apiKey || process.env.OPENROUTER_API_KEY || undefined;
+
+		// Reasoning models (e.g. Gemma 4 E2B) emit CoT by default, which is
+		// slow + non-deterministic. Default to OFF for local runs unless the
+		// caller explicitly keeps it on.
+		const reasoningEnabled = opts.noReasoning === false;
+		const reasoning: { effort: "none" } | false = reasoningEnabled
+			? { effort: "none" }
+			: false;
+
+		if (useLocal || resolvedApiKey) {
 			configureProvider({
-				apiKey: opts.apiKey || process.env.OPENROUTER_API_KEY,
+				apiKey: resolvedApiKey,
+				baseUrl: resolvedBaseUrl,
+				// Local runtimes (127.0.0.1 / localhost) never need a key.
+				skipAuth: !!useLocal,
+				reasoning,
 			});
 		}
 		configureBudget({

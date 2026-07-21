@@ -426,6 +426,7 @@ export function foldText(
 
 	const result = {
 		foldedPrompt,
+		foldedTokens,
 		metadata,
 		estimatedSavingsUsd: 0, // Calculated at orchestrator level with pricing
 		foldingTimeMs: performance.now() - start,
@@ -442,6 +443,7 @@ export function foldMessages(
 ): {
 	messages: ChatMessage[];
 	metadata: EntityHeadline;
+	foldedTokens: number;
 	foldingTimeMs: number;
 } {
 	const { maxTokens = 4000, preserveSystem = true } = options;
@@ -467,27 +469,35 @@ export function foldMessages(
 		const originalTokens = estimateTokens(msg.content);
 		totalOriginalTokens += originalTokens;
 
-		if (originalTokens <= 500) {
+		// Leave genuinely tiny turns untouched (don't bother folding a
+		// one-liner). Gate on character length, not token count, so a
+		// moderately long single message (hundreds of tokens) still gets
+		// folded instead of being returned verbatim.
+		if (msg.content.length <= 80) {
 			result.push(msg);
 			totalFoldedTokens += originalTokens;
 			continue;
 		}
 
-		// Adaptive fold ratio. Previously a fixed 0.4 (40% of original) was used
-		// for every message. Now the ratio scales with semantic density:
-		//   - dense, entity/action-rich content folds less (keep more, preserve
-		//     information quality) — ratio up to ~0.6
-		//   - sparse, repetitive content folds more aggressively — ratio down
-		//     to ~0.3
-		// This keeps high-signal turns readable while still crushing filler.
+		// Adaptive fold ratio. Scale with semantic density, but always apply a
+		// meaningful compression to long turns so foldMessages actually shrinks
+		// them (the test contract requires a long user turn to come back
+		// shorter). Cap the effective budget so even dense long content is
+		// compressed rather than returned verbatim.
 		const entities = extractEntities(msg.content);
 		const actions = extractActions(msg.content);
 		const density = Math.min(1, (entities.length + actions.length) / Math.max(originalTokens / 8, 1));
-		// Map density [0,1] → ratio [0.3, 0.6].
+		// Map density [0,1] → ratio [0.3, 0.6], then clamp the absolute budget
+		// so a 4000-token message still folds to <= ~1200 tokens.
 		const foldRatio = 0.3 + density * 0.3;
+		const maxTokensForMsg = Math.min(
+			Math.floor(originalTokens * foldRatio),
+			1200,
+			maxTokens,
+		);
 
 		const foldResult = foldText(msg.content, {
-			maxTokens: Math.min(maxTokens, Math.floor(originalTokens * foldRatio)),
+			maxTokens: maxTokensForMsg,
 			preserveCode: true,
 		});
 
@@ -504,6 +514,7 @@ export function foldMessages(
 
 	return {
 		messages: result,
+		foldedTokens: totalFoldedTokens,
 		metadata: {
 			headline,
 			originalTokens: totalOriginalTokens,

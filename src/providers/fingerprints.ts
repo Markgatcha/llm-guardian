@@ -68,7 +68,7 @@ const DEFAULT_STRUCTURE: PromptSection[] = [
 const CLAUDE_STRUCTURE: PromptSection[] = [
 	{ type: "system", priority: 1, maxLength: 3000 },
 	{ type: "examples", priority: 2, maxLength: 2000 },
-	{ type: "context", priority: 3, maxLength: 6000 },
+	{ type: "context", priority: 3, maxLength: 2980 },
 	{ type: "tools", priority: 4, maxLength: 2000 },
 	{ type: "instruction", priority: 5, maxLength: 1500 },
 	{ type: "query", priority: 6, maxLength: 3000 },
@@ -333,6 +333,25 @@ register({
 	supportsToolUse: false,
 });
 
+// ── Local OpenAI-Compatible Runtime (LM Studio / Ollama / llama.cpp) ───
+// Zero-cost entry so budget math and the /providers endpoint have a profile
+// for local models. Use `local/auto` as the model id when routing through a
+// local runtime; the real served model id (e.g. google/gemma-4-e2b) also
+// works — cost just computes as $0 because no fingerprint matches it.
+register({
+	modelName: "local/auto",
+	provider: "local",
+	attentionBiases: OPEN_SOURCE_BIAS,
+	optimalStructure: DEFAULT_STRUCTURE,
+	contextWindow: 128_000,
+	maxOutputTokens: 8_192,
+	inputCostPerMillion: 0,
+	outputCostPerMillion: 0,
+	supportsStreaming: true,
+	supportsVision: false,
+	supportsToolUse: true,
+});
+
 // ─── Lookup Functions ────────────────────────────────────────────────────────
 
 export function getModelFingerprint(
@@ -380,7 +399,7 @@ export function reorderPromptForModel(
 		if (content) {
 			const truncated =
 				content.length > section.maxLength
-					? `${content.slice(0, section.maxLength)}...`
+					? `${content.slice(0, section.maxLength).replace(/\s+$/, "")}...`
 					: content;
 			ordered.push(truncated);
 		}

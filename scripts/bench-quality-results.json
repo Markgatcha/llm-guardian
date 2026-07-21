@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-07-09T01:15:02.676Z",
+  "model": "google/gemma-4-e2b",
+  "baseUrl": "http://127.0.0.1:1234/v1",
+  "trials": 4,
+  "deltaFloor": -0.05,
+  "worstDeltaRecall": 0,
+  "meanAnswerF1": 0.916,
+  "perTask": [
+    {
+      "name": "stack-components",
+      "rawMeanKeywordRecall": 1,
+      "optMeanKeywordRecall": 1,
+      "deltaRecall": 0,
+      "meanAnswerF1": 0.967,
+      "trials": 4
+    },
+    {
+      "name": "config-detail",
+      "rawMeanKeywordRecall": 1,
+      "optMeanKeywordRecall": 1,
+      "deltaRecall": 0,
+      "meanAnswerF1": 0.846,
+      "trials": 4
+    },
+    {
+      "name": "long-architecture-recall",
+      "rawMeanKeywordRecall": 0.667,
+      "optMeanKeywordRecall": 0.667,
+      "deltaRecall": 0,
+      "meanAnswerF1": 0.936,
+      "trials": 4
+    }
+  ]
+}

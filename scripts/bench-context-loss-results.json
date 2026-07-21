@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-07-09T01:15:49.274Z",
+  "minFactRetention": 0.9,
+  "meanFactRetention": 1,
+  "meanCompressionRatio": 1.155,
+  "perConversation": [
+    {
+      "name": "deploy-pipeline",
+      "originalTokens": 127,
+      "finalTokens": 96,
+      "compressionRatio": 1.323,
+      "factsKept": 8,
+      "factsTotal": 8,
+      "factsDropped": [],
+      "retention": 1
+    },
+    {
+      "name": "monorepo-stack",
+      "originalTokens": 104,
+      "finalTokens": 91,
+      "compressionRatio": 1.143,
+      "factsKept": 8,
+      "factsTotal": 8,
+      "factsDropped": [],
+      "retention": 1
+    },
+    {
+      "name": "api-incident",
+      "originalTokens": 65,
+      "finalTokens": 65,
+      "compressionRatio": 1,
+      "factsKept": 8,
+      "factsTotal": 8,
+      "factsDropped": [],
+      "retention": 1
+    }
+  ]
+}

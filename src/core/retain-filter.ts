@@ -24,10 +24,25 @@ export interface RetainInput {
 	/** The user prompt that triggered the turn (for context). */
 	userPrompt?: string;
 	/**
+	 * Role of the turn. USER and SYSTEM turns are always retained (the
+	 * query and system instructions are sacred); the retain filter only
+	 * prunes assistant / low-signal turns. Omitting role defaults to
+	 * treating the turn as prunable.
+	 */
+	role?: "user" | "assistant" | "system" | "tool";
+	/**
 	 * Entities already seen earlier in the session (from the VCM skeleton).
 	 * Used to down-weight turns that only repeat known entities (low novelty).
 	 */
 	seenEntities?: string[];
+	/**
+	 * Entities carried by turns we have ALREADY DECIDED TO RETAIN this
+	 * pass. When provided, a turn that is the SOLE carrier of a
+	 * high-value entity (file path, URL, API endpoint, or metric) is forced
+	 * KEEP so the pipeline never silently drops the only mention of a fact.
+	 * This is the "without losing context" guarantee for the retain filter.
+	 */
+	retainedEntities?: string[];
 	/** Number of prior turns in the session (recency / novelty context). */
 	turnIndex?: number;
 }
@@ -65,7 +80,51 @@ const ENTITY_SIGNALS = [
 // Low-signal indicators — presence pushes the score down (likely chit-chat /
 // acknowledgement turns that aren't worth retaining in full).
 const LOW_SIGNAL_PATTERNS =
-	/^(?:ok|okay|sure|got it|understood|done|will do|sure thing|sounds good|great|perfect|thanks|thank you|yep|yup|no problem|of course|absolutely|right|correct|exactly|sounds great|makes sense)[.!?]?$/i;
+	/\b(?:ok|okay|sure|got it|understood|done|will do|sure thing|sounds good|great|perfect|thanks|thank you|yep|yup|no problem|of course|absolutely|right|correct|exactly|sounds great|makes sense)\b/i;
+
+// Answer / actionable signal — presence means the turn CARRIES information
+// worth keeping (a concrete instruction, value, path, or metric), so it must
+// never be dropped by the retain pre-filter even if its verb density is low.
+// Without this, short fact-dense answers ("Rollback: npm dist-tag @latest
+// prev and redeploy the Docker image") score below RETAIN_THRESHOLD and get
+// deleted — silently losing the answer. See scripts/bench-context-loss.ts.
+const ANSWER_SIGNAL_PATTERNS = [
+	/`[^`]+`/g, // inline code / commands
+	/(?:[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml))/g, // file paths
+	/https?:\/\/[^\s,)]+/g, // urls
+	/(?:GET|POST|PUT|DELETE|PATCH)\s+[\w/:-]+/g, // api endpoints
+	/\b\d+(?:\.\d+)?(?:%|ms|s|tok|tokens|usd|\$)\b/gi, // metrics w/ units
+	/\b(?:rollback|redeploy|revert|set|configure|update|add|remove|create|delete|enable|disable|restart|scale|migrate|install|run|execute|fix|patch|increase|decrease|change)\b/gi, // explicit step verbs
+];
+
+// Global regex instance for the low-signal check. Defined before scoreRetain
+// uses it.
+const LOW_SIGNAL_PATTERN_GLOBAL = new RegExp(LOW_SIGNAL_PATTERNS.source, "i");
+
+/** True when `content` carries an answer/action signal we must never drop. */
+export function hasAnswerSignal(content: string): boolean {
+	for (const pattern of ANSWER_SIGNAL_PATTERNS) {
+		const regex = new RegExp(pattern.source, pattern.flags);
+		if (regex.test(content)) return true;
+	}
+	return false;
+}
+
+/**
+ * Extract high-value entities (file paths, URLs, API endpoints, metrics) from
+ * `content`. Used by callers to track which facts their retained turns
+ * already cover, so the sole-carrier rescue in `isSoleCarrier` can keep a
+ * turn that is the only mention of a fact.
+ */
+export function extractEntities(content: string): string[] {
+	const out: string[] = [];
+	for (const pattern of ENTITY_SIGNALS) {
+		const regex = new RegExp(pattern.source, pattern.flags);
+		const matches = content.match(regex);
+		if (matches) out.push(...matches);
+	}
+	return out;
+}
 
 /**
  * Count distinct signal indicators in the content.
@@ -142,23 +201,62 @@ export function scoreRetain(input: RetainInput): number {
 	return Math.min(1, score);
 }
 
-// Global regex instance for the low-signal check (reset after each use above).
-const LOW_SIGNAL_PATTERN_GLOBAL = new RegExp(LOW_SIGNAL_PATTERNS.source, "i");
-
 /**
  * Decide whether to retain a turn's full content. Default uses the local
  * classifier; callers can inject an LLM-backed classifier via
  * `setRetainClassifier()` for higher precision.
  */
 export function shouldRetain(input: RetainInput): RetainDecision {
+	// Sacred turns: user query + system instructions are never pruned.
+	if (input.role === "user" || input.role === "system") {
+		return { retain: true, score: 1, reason: "sacred role" };
+	}
 	const score = scoreRetain(input);
-	const retain = score >= RETAIN_THRESHOLD;
+	const answerSignal = hasAnswerSignal(input.content);
+	const lowSignal = LOW_SIGNAL_PATTERN_GLOBAL.test(input.content.trim());
+	LOW_SIGNAL_PATTERN_GLOBAL.lastIndex = 0;
+	const soleCarrier = isSoleCarrier(input);
+	// An acknowledgement phrase is low-signal → it must NOT be retained (dropped
+	// from history), but the reason should still say "low-signal acknowledgement".
+	// A sole carrier of a unique entity is rescued even if it also looks like an
+	// answer.
+	const retain = answerSignal || soleCarrier || score >= RETAIN_THRESHOLD;
 	let reason: string;
-	if (input.content.length < MIN_LENGTH) reason = "too short";
+	if (lowSignal) reason = "low-signal acknowledgement";
+	else if (input.content.length < MIN_LENGTH) reason = "too short";
+	else if (soleCarrier) reason = "sole carrier of unique signal";
+	else if (answerSignal) reason = "answer/action signal";
 	else if (score < 0.1) reason = "low-signal acknowledgement";
 	else if (retain) reason = "signal density above threshold";
 	else reason = "below retain threshold";
-	return { retain, score, reason };
+	const forced = reason === "sole carrier of unique signal";
+	return { retain: retain || forced, score, reason };
+}
+
+/**
+ * True when `content` carries a high-value entity that NO already-retained
+ * turn has mentioned — i.e. dropping this turn loses the only mention of
+ * that fact this pass.
+ */
+function isSoleCarrier(input: RetainInput): boolean {
+	const retained = input.retainedEntities ?? [];
+	const UNIQUE_PATTERNS = [
+		/(?:[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml))/g,
+		/https?:\/\/[^\s,)]+/g,
+		/(?:GET|POST|PUT|DELETE|PATCH)\s+[\w/:-]+/g,
+		/\b\d+(?:\.\d+)?(?:%|ms|s|tok|tokens|usd|\$)\b/gi,
+	];
+	for (const pattern of UNIQUE_PATTERNS) {
+		const regex = new RegExp(pattern.source, pattern.flags);
+		const matches = input.content.match(regex);
+		if (matches) {
+			// Nothing retained yet → any high-value entity is the sole carrier.
+			if (retained.length === 0) return true;
+			const unseen = matches.filter((m) => !retained.includes(m));
+			if (unseen.length > 0) return true;
+		}
+	}
+	return false;
 }
 
 /**

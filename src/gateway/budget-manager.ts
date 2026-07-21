@@ -60,37 +60,42 @@ export function checkBudget(estimatedCostUsd: number): BudgetStatus {
 	const dailySpent = getDailySpend();
 	const monthlySpent = getMonthlySpend();
 
-	// Per-request limit
+	// Order matters: check the LARGEST budget first. A request that would
+	// exceed the monthly budget is reported as a monthly breach even if it also
+	// exceeds the daily/per-request caps; a request within monthly but over
+	// daily is a daily breach; only requests that fit monthly+daily but exceed
+	// the per-request hard cap are per-request breaches.
+	const monthlySpentProjected = monthlySpent + estimatedCostUsd;
+	if (monthlySpentProjected > config.monthlyBudgetUsd) {
+		return {
+			allowed: false,
+			reason: `Monthly budget would be exceeded: $${monthlySpentProjected.toFixed(4)} > $${config.monthlyBudgetUsd.toFixed(4)}`,
+			estimatedCostUsd,
+			dailySpentUsd: dailySpent,
+			dailyLimitUsd: config.dailyBudgetUsd,
+			monthlySpentUsd: monthlySpent,
+			monthlyLimitUsd: config.monthlyBudgetUsd,
+		};
+	}
+
+	const dailySpentProjected = dailySpent + estimatedCostUsd;
+	if (dailySpentProjected > config.dailyBudgetUsd) {
+		return {
+			allowed: false,
+			reason: `Daily budget would be exceeded: $${dailySpentProjected.toFixed(4)} > $${config.dailyBudgetUsd.toFixed(4)}`,
+			estimatedCostUsd,
+			dailySpentUsd: dailySpent,
+			dailyLimitUsd: config.dailyBudgetUsd,
+			monthlySpentUsd: monthlySpent,
+			monthlyLimitUsd: config.monthlyBudgetUsd,
+		};
+	}
+
+	// Per-request hard cap.
 	if (estimatedCostUsd > config.maxRequestCostUsd) {
 		return {
 			allowed: false,
 			reason: `Request cost $${estimatedCostUsd.toFixed(4)} exceeds per-request limit $${config.maxRequestCostUsd.toFixed(4)}`,
-			estimatedCostUsd,
-			dailySpentUsd: dailySpent,
-			dailyLimitUsd: config.dailyBudgetUsd,
-			monthlySpentUsd: monthlySpent,
-			monthlyLimitUsd: config.monthlyBudgetUsd,
-		};
-	}
-
-	// Daily budget
-	if (dailySpent + estimatedCostUsd > config.dailyBudgetUsd) {
-		return {
-			allowed: false,
-			reason: `Daily budget would be exceeded: $${(dailySpent + estimatedCostUsd).toFixed(4)} > $${config.dailyBudgetUsd.toFixed(4)}`,
-			estimatedCostUsd,
-			dailySpentUsd: dailySpent,
-			dailyLimitUsd: config.dailyBudgetUsd,
-			monthlySpentUsd: monthlySpent,
-			monthlyLimitUsd: config.monthlyBudgetUsd,
-		};
-	}
-
-	// Monthly budget
-	if (monthlySpent + estimatedCostUsd > config.monthlyBudgetUsd) {
-		return {
-			allowed: false,
-			reason: `Monthly budget would be exceeded: $${(monthlySpent + estimatedCostUsd).toFixed(4)} > $${config.monthlyBudgetUsd.toFixed(4)}`,
 			estimatedCostUsd,
 			dailySpentUsd: dailySpent,
 			dailyLimitUsd: config.dailyBudgetUsd,
@@ -133,6 +138,11 @@ export function getSpendSummary() {
 	};
 }
 
+/** Clear all recorded spend. Used by tests for isolation between cases. */
+export function resetSpend(): void {
+	spendLog.length = 0;
+}
+
 export default {
 	checkBudget,
 	recordSpend,
@@ -140,4 +150,5 @@ export default {
 	configure,
 	getConfig,
 	getSpendSummary,
+	resetSpend,
 };
