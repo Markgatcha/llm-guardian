@@ -565,3 +565,9 @@ guardian chronicle standup
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Security
+
+If you discover a security vulnerability, please report it responsibly — see our
+[Security Policy](SECURITY.md). We use GitHub CodeQL for static analysis and
+triage all security alerts.
