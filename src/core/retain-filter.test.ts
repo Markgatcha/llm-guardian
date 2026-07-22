@@ -72,10 +72,10 @@ describe("retain-filter", () => {
     const ents = extractEntities(
       "Edit src/a.ts, visit https://example.com, call GET /x, metric 50ms.",
     );
-    expect(ents.some((e) => e.includes("src/a.ts"))).toBe(true);
-    expect(ents.some((e) => e.includes("https://example.com"))).toBe(true);
-    expect(ents.some((e) => e.includes("GET /x"))).toBe(true);
-    expect(ents.some((e) => e.includes("50ms"))).toBe(true);
+    expect(ents.some((e) => e === "src/a.ts")).toBe(true);
+    expect(ents.some((e) => e === "https://example.com")).toBe(true);
+    expect(ents.some((e) => e === "GET /x")).toBe(true);
+    expect(ents.some((e) => e === "50ms")).toBe(true);
   });
 
   it("delegates to a custom classifier via setRetainClassifier", () => {
