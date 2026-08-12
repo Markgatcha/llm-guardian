@@ -17,6 +17,7 @@ import {
 	structureForCaching,
 	shouldUseTokenEfficientTools,
 } from "./prompt-cache.ts";
+import { getResponseCache, providerFromModel } from "./response-cache.ts";
 import type {
 	GuardianRequest,
 	GuardianResponse,
@@ -179,10 +180,15 @@ export async function orchestrate(
 	}
 
 	// ── Step 3: Semantic Folding ──────────────────────────────────────────────
+	// Compute token count once and reuse for both folding and sharding gates.
 	const originalPromptTokens = workingMessages.reduce(
 		(sum, m) => sum + estimateTokens(m.content),
 		0,
 	);
+
+	// Extract the user message once — both folding and sharding need it.
+	const userMessage =
+		workingMessages.filter((m) => m.role === "user").pop()?.content || "";
 
 	if (request.enableFolding && originalPromptTokens > 1000) {
 		const foldResult = foldMessages(workingMessages, {
@@ -227,11 +233,8 @@ export async function orchestrate(
 		0,
 	);
 	if (request.enableSharding && postFoldTokens > 2000) {
-		const userMessage =
-			workingMessages.filter((m) => m.role === "user").pop()?.content || "";
-		// Keep sharding within the folded context: cap the budget at ~90% of
-		// what's left so low-relevance turns are still dropped, never exceed
-		// the previous 3000 ceiling.
+		// Reuse the userMessage extracted before folding — the user's
+		// latest query is the anchor for relevance scoring.
 		const shardBudget = Math.min(3000, Math.floor(postFoldTokens * 0.9));
 		const shardResult = shardMessages(workingMessages, userMessage, {
 			maxTokens: shardBudget,
@@ -293,6 +296,57 @@ export async function orchestrate(
 		needsStreaming: request.stream,
 	});
 
+	// ── Step 6b: Response Cache Check ─────────────────────────────────────────
+	// After all optimization, check if we've already computed this exact
+	// response. The cache key includes the optimized messages, model, and
+	// tools — so any change in the optimized request produces a different key.
+	// This skips the provider call entirely on cache hits.
+	const cache = getResponseCache();
+	const cacheKey = cache.buildKey(selectedModel, cachedMessages, workingTools);
+	const cached = cache.get(cacheKey);
+	if (cached) {
+		const latencyMs = performance.now() - startTime;
+		const event: RequestEvent = {
+			requestId,
+			model: selectedModel,
+			// Use the stored provider, not the router name — a cache hit must
+			// report the same provider identity as a fresh dispatch.
+			provider: cached.provider,
+			promptTokens: cached.usage.promptTokens,
+			completionTokens: cached.usage.completionTokens,
+			costUsd: 0, // Free — cache hit
+			baselineCostUsd: 0,
+			savedUsd: 0,
+			latencyMs,
+			status: "ok",
+			cacheHit: true,
+			optimizationMetrics: optimization,
+			timestamp: Date.now(),
+		};
+		recordEvent(event);
+
+		return {
+			id: requestId,
+			model: selectedModel,
+			// Invariant: cache key embeds model which embeds provider, but we
+			// store provider explicitly so the hit response never shows the
+			// router name (openrouter).
+			provider: cached.provider,
+			content: cached.content,
+			usage: {
+				promptTokens: cached.usage.promptTokens,
+				completionTokens: cached.usage.completionTokens,
+				totalTokens: cached.usage.totalTokens,
+			},
+			costUsd: 0,
+			baselineCostUsd: 0,
+			savedUsd: 0,
+			latencyMs,
+			optimization,
+			cacheHit: true,
+		};
+	}
+
 	// ── Step 7: Execute Completion ────────────────────────────────────────────
 	const response = await complete({
 		model: selectedModel,
@@ -316,16 +370,26 @@ export async function orchestrate(
 		response.usage.completionTokens,
 	);
 
-	optimization.totalSavingsUsd =
-		(optimization.totalTokensSaved / 1_000_000) * 2.5 +
-		(baselineCost - actualCost);
-
-	recordSpend(actualCost);
+	// ── Step 8b: Store Response in Cache ─────────────────────────────────────
+	// Cache the response for future identical requests. Pass the real provider
+	// (extracted from model ID) so cache-hit responses later report the correct
+	// provider identity (not the router name).
+	cache.set(
+		cacheKey,
+		response.content,
+		selectedModel,
+		providerFromModel(selectedModel),
+		{
+			promptTokens: response.usage.promptTokens,
+			completionTokens: response.usage.completionTokens,
+			totalTokens: response.usage.totalTokens,
+		},
+	);
 
 	const event: RequestEvent = {
 		requestId,
 		model: selectedModel,
-		provider: "openrouter",
+		provider: providerFromModel(selectedModel),
 		promptTokens: response.usage.promptTokens,
 		completionTokens: response.usage.completionTokens,
 		costUsd: actualCost,
@@ -342,7 +406,7 @@ export async function orchestrate(
 	return {
 		id: requestId,
 		model: selectedModel,
-		provider: "openrouter",
+		provider: providerFromModel(selectedModel),
 		content: response.content,
 		usage: response.usage,
 		costUsd: actualCost,
@@ -350,6 +414,7 @@ export async function orchestrate(
 		savedUsd: event.savedUsd,
 		latencyMs,
 		optimization,
+		cacheHit: false,
 	};
 }
 
@@ -419,6 +484,32 @@ export async function* orchestrateStream(
 			foldResult.metadata.originalTokens - foldResult.metadata.foldedTokens;
 	}
 
+	// Tool Gating (same as non-streaming path)
+	let workingTools = request.tools;
+	{
+		const lastUserMsg =
+			workingMessages.filter((m) => m.role === "user").pop()?.content || "";
+		const gated = gateTools(request.tools, lastUserMsg, { maxTools: 8 });
+		if (gated.removed > 0) {
+			workingTools = gated.tools;
+			optimization.toolGatingApplied = true;
+			optimization.toolGatingRemoved = gated.removed;
+		}
+	}
+
+	// Prompt Caching (same as non-streaming path)
+	let cachedMessages = workingMessages;
+	{
+		const structured = structureForCaching(workingMessages, {
+			enableCaching: request.enablePromptCaching,
+		});
+		if (structured.cachingStructured) {
+			cachedMessages = structured.messages;
+			optimization.promptCachingApplied = true;
+			optimization.promptCachingPrefixTokens = structured.prefixTokens;
+		}
+	}
+
 	const selectedModel = selectModel(request.model);
 	const estimatedCost = calculateCost(
 		selectedModel,
@@ -434,10 +525,11 @@ export async function* orchestrateStream(
 	// Stream chunks from the provider via completeStream() generator
 	const stream = completeStream({
 		model: selectedModel,
-		messages: workingMessages,
+		messages: cachedMessages,
 		temperature: request.temperature,
 		maxTokens: request.maxTokens,
 		stream: true,
+		tools: workingTools,
 	});
 
 	let result = await stream.next();
@@ -465,7 +557,7 @@ export async function* orchestrateStream(
 	recordEvent({
 		requestId,
 		model: selectedModel,
-		provider: "openrouter",
+		provider: providerFromModel(selectedModel),
 		promptTokens: response.usage.promptTokens,
 		completionTokens: response.usage.completionTokens,
 		costUsd: actualCost,
@@ -481,7 +573,7 @@ export async function* orchestrateStream(
 	return {
 		id: requestId,
 		model: selectedModel,
-		provider: "openrouter",
+		provider: providerFromModel(selectedModel),
 		content: fullContent,
 		usage: response.usage,
 		costUsd: actualCost,

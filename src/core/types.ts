@@ -252,6 +252,8 @@ export interface GuardianResponse {
 	latencyMs: number;
 	/** Metrics from the optimization pipeline */
 	optimization: OptimizationMetrics;
+	/** Whether this response was served from the response cache */
+	cacheHit?: boolean;
 }
 
 export interface TokenUsage {

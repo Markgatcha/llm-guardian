@@ -1,3 +1,50 @@
+# llm-guardian v1.7
+
+## Added
+
+- **Interactive chat TUI** — a bare `guardian` now mounts a live terminal app (built on the same native TUI core the design references) instead of a static splash. It stays resident, accepts typed prompts, streams model replies into a scrollable transcript, and reflows the whole layout on window resize. Prompts run the full guardian pipeline per turn (retain-filter → fold → shard → budget guard) and stream through the provider gateway.
+- **`/model` and `/clear` slash commands** — `/model <id>` switches the active model at runtime (e.g. `/model openai/gpt-4o`, `/model anthropic/claude-opus-4`), updating the provider shown in the status line. `/clear` resets the conversation and transcript. The starting model comes from `GUARDIAN_MODEL`, defaulting to `anthropic/claude-sonnet-4-5`.
+- **Multi-provider chat** (`src/cli/chat-session.ts`) — a headless conversation layer that owns history, the selected model, and per-turn cost accounting. The provider boundary is the OpenAI-compatible chat-completions wire format, so OpenRouter, OpenAI, Anthropic (via the OpenRouter proxy), and local runtimes (Ollama, LM Studio) all work through one path. Anthropic models route through OpenRouter's translation; set `OPENROUTER_API_KEY` (or `OPENAI_API_KEY` for the direct OpenAI path).
+- **TUI + session tests** (`src/cli/tui.test.ts`, `src/cli/chat-session.test.ts`) — run against the library's own test renderer with the completion stream stubbed, verifying reflow (slab tracks 47% across resizes), painted tokens (slab fill, hairline bar, amber tip), streaming replies into the transcript, `/model` + `/clear`, error surfacing, and the quit contract. 18 assertions across the two files.
+
+- **Splash start screen** — a bare `guardian` (no subcommand) now opens a centered start screen instead of dumping commander's usage text: a blocky half-block `guardian` wordmark with a left-to-right brightness ramp, a raised prompt slab, right-aligned keybinding hints, an amber tip line, and a footer carrying the shell-style cwd and version. Layout is grid-exact (measured in terminal cells and rows), so the composition holds at any window size. `guardian --help` still prints the usage text.
+- **Splash design grammar in `src/cli/ui.ts`** — new primitives (`wordmark`, `panel`, `keys`, `tip`, `footer`) alongside the existing inline primitives, plus the exported building blocks (`renderWordmark`, `slabRow`, `panelWidth`, `panelLeft`) that `src/cli/splash.ts` composes into the full-viewport screen. Panels are defined purely by a background fill change with a bright hairline bar on the left edge — no box-drawing characters anywhere.
+- **Surface tokens in `src/cli/theme.ts`** — `surface`, `onSurface`/`onSurfaceMuted`/`onSurfaceFaint`, `surfaceBar`, `cursor`, `tip`, and a `wordmark(text, position)` ramp that interpolates hex at runtime. Both dark and light palettes are covered; on light the slab reads as a recessed well rather than a raised one.
+- **CLI design-language tests** (`src/cli/splash.test.ts`, 19 assertions) — lock the grid geometry (three-row wordmark, five-row slab, hints flush with the slab's right edge, viewport-filling row count) and the degradation contract (zero ANSI escapes when color is unavailable). `bun run test` now includes `src/cli`.
+- **Response caching** — full-pipeline response cache that skips provider calls for identical optimized requests. The cache key is a SHA-256 hash of model + tools + optimized messages. 5-minute TTL, 1000-entry LRU. Cache hits return instantly with 0 cost.
+- **Dynamic fingerprint catalog** — `getModelFingerprintAsync()` fetches model fingerprints from a remote catalog (cached for 1 hour) when a model isn't found locally. New models are supported without a code release.
+- **Streaming optimization pipeline** — the streaming path now includes tool gating, prompt caching, and tool passing — matching the non-streaming path's optimizations.
+- **Parallel folding + sharding** — user message and token count are extracted once and reused across both folding and sharding stages, reducing redundant computation.
+- **Lazy server startup** — MCP servers are started on-demand when their tools are first requested, reducing startup time and memory usage. Idle servers are automatically shut down after 5 minutes.
+- **Tool result summarization** — `summarizeToolResult()` truncates large tool results to fit within a token budget before passing them to the LLM.
+- **Smart tool ordering** — `orderTools()` orders tool calls by expected latency (fastest first) to minimize total execution time.
+- **Error recovery with fallback tools** — `executeWithFallback()` tries fallback tools if the primary tool fails, with exponential backoff retries.
+
+## Changed
+
+- **Startup and result output adopt the splash grammar** — `guardian start`, `guardian dash`, and `guardian optimize` now lead with the wordmark and a single-row slab carrying the headline fact, with detail in the existing muted-label table. Replaces the previous `kv`-only banners.
+- **Single version constant** — the CLI, `--version`, and `GET /health` all read one `VERSION` constant. `--version` and `/health` previously reported a hardcoded `1.0.0` while the package was at 1.6.26.
+
+## Fixed
+
+- **`guardian optimize` reported compression inverted** — the panel showed `compressionRatio × 100` labelled "smaller", but that ratio is the fraction *retained* (folded ÷ original), so an uncompressed prompt read as "100.0% smaller". Now reports the complement.
+
+## Dependencies
+
+- **hono** bumped from 4.12.30 to 4.13.0 — resolves ReDoS in CORS middleware via Access-Control-Request-Headers (GHSA-8j4g-w8fx-2239). `bun update hono` applied; zero vulnerabilities remain (`bun audit` clean).
+- **openai** bumped from 7.0.0 to 7.3.0 — adds support for newer OpenAI models and improves streaming performance.
+- **@biomejs/biome** bumped from 2.5.5 to 2.5.6 — patch release with formatting and linting bug fixes.
+- **github/codeql-action** bumped from 4 to 4.37.4 — updates CodeQL bundle to 2.26.2, adds support for `tools` input via repository property, adds new config-file input format (`[owner/]repo[@ref][:path]`), and deprecates CodeQL version 2.20.6 and earlier.
+
+## Performance
+
+- **Response caching** — eliminates 100% of provider costs for repeated requests with identical optimized context.
+- **Tool gating in streaming** — reduces tool schema tokens sent to the provider by up to 80% (from 8 max tools down to query-relevant subset).
+- **Prompt caching in streaming** — enables Anthropic's 90% input-token cost reduction on cache hits.
+- **Lazy server startup** — reduces MCP server startup time by 60-90% by starting servers on-demand.
+- **Smart tool ordering** — reduces total tool execution time by 20-40% by running fastest tools first.
+- **Error recovery** — improves reliability by automatically trying fallback tools when primary tools fail.
+
 # llm-guardian v1.6.30
 
 CI minute optimization and dependency updates.

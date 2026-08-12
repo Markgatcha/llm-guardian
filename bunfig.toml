@@ -7,3 +7,14 @@ preload = ["./src/core/types.ts"]
 
 [run]
 bun = true
+
+[cache]
+# Enable Bun's native disk cache for faster rebuilds.
+# The cache stores compiled bytecode so subsequent runs skip
+# JIT compilation entirely for unchanged files.
+compile = "compile"
+
+[compile]
+# Faster compilation by reducing optimization passes in dev.
+# Production builds can override these flags explicitly.
+unsafe_fast_call_apply = true

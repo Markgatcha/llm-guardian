@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-19T19:59:27.825Z",
+  "generatedAt": "2026-08-02T04:25:55.376Z",
   "runtime": "bun 1.4.0",
   "release": "v1.6.26-new-modules",
   "results": [
@@ -7,11 +7,11 @@
       "name": "token-counter-bpe",
       "operation": "token-counting",
       "method": "GPT-style BPE estimator",
-      "inputTokens": 720,
-      "p50Ms": 0.046,
-      "p95Ms": 0.107,
-      "p99Ms": 0.163,
-      "meanMs": 0.057,
+      "inputTokens": 1020,
+      "p50Ms": 0.039,
+      "p95Ms": 0.077,
+      "p99Ms": 0.142,
+      "meanMs": 0.047,
       "samples": 1000,
       "note": "vs naive char/4 baseline",
       "naiveP50Ms": 0
@@ -29,19 +29,19 @@
       "fillerTurn": {
         "content": "Sure! Let me know if you need anything e...",
         "retain": false,
-        "score": 0.2,
-        "reason": "below retain threshold"
+        "score": 0.05,
+        "reason": "low-signal acknowledgement"
       },
       "typicalTurn": {
         "content": "Sure, I can help with that! Let me take ...",
-        "retain": true,
-        "score": 0.4666666666666667,
-        "reason": "signal density above threshold"
+        "retain": false,
+        "score": 0.05,
+        "reason": "low-signal acknowledgement"
       },
-      "p50Ms": 0.017,
-      "p95Ms": 0.036,
-      "p99Ms": 0.065,
-      "meanMs": 0.023,
+      "p50Ms": 0.004,
+      "p95Ms": 0.012,
+      "p99Ms": 0.04,
+      "meanMs": 0.007,
       "samples": 1000
     },
     {
@@ -50,13 +50,13 @@
       "catalogSize": 52,
       "toolsSent": 8,
       "toolsRemoved": 44,
-      "fullSchemaTokens": 738,
+      "fullSchemaTokens": 740,
       "gatedSchemaTokens": 117,
-      "schemaTokenReduction": 0.841,
-      "p50Ms": 0.083,
-      "p95Ms": 0.22,
-      "p99Ms": 0.36,
-      "meanMs": 0.108,
+      "schemaTokenReduction": 0.842,
+      "p50Ms": 0.067,
+      "p95Ms": 0.167,
+      "p99Ms": 0.24,
+      "meanMs": 0.085,
       "samples": 1000
     },
     {
@@ -65,14 +65,14 @@
       "minCacheablePrefixTokens": 1024,
       "messageCount": 14,
       "cachingStructured": true,
-      "cacheablePrefixTokens": 1428,
-      "volatileSuffixTokens": 7,
+      "cacheablePrefixTokens": 1766,
+      "volatileSuffixTokens": 8,
       "cacheEligible": true,
       "estimatedAnthropicSavingsPct": 90,
-      "p50Ms": 0.081,
-      "p95Ms": 0.186,
-      "p99Ms": 0.27,
-      "meanMs": 0.098,
+      "p50Ms": 0.067,
+      "p95Ms": 0.139,
+      "p99Ms": 0.26,
+      "meanMs": 0.084,
       "samples": 1000
     }
   ]

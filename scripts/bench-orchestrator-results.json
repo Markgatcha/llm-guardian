@@ -1,27 +1,27 @@
 {
-  "generatedAt": "2026-07-08T19:27:05.078Z",
+  "generatedAt": "2026-08-02T04:25:54.976Z",
   "samples": 200,
   "latencyBudgetMs": 30,
   "minCompressionRatio": 1.5,
-  "meanCompressionRatio": 1.799,
-  "meanP95LatencyMs": 0.557,
-  "meanP99LatencyMs": 1.012,
+  "meanCompressionRatio": 2.085,
+  "meanP95LatencyMs": 0.712,
+  "meanP99LatencyMs": 1.569,
   "perConversation": [
     {
-      "originalTokens": 220,
-      "finalTokens": 145,
-      "compressionRatio": 1.517,
-      "p50Ms": 0.298,
-      "p95Ms": 0.665,
-      "p99Ms": 1.332
+      "originalTokens": 249,
+      "finalTokens": 138,
+      "compressionRatio": 1.804,
+      "p50Ms": 0.39,
+      "p95Ms": 0.958,
+      "p99Ms": 1.752
     },
     {
-      "originalTokens": 179,
-      "finalTokens": 86,
-      "compressionRatio": 2.081,
-      "p50Ms": 0.241,
-      "p95Ms": 0.449,
-      "p99Ms": 0.691
+      "originalTokens": 194,
+      "finalTokens": 82,
+      "compressionRatio": 2.366,
+      "p50Ms": 0.29,
+      "p95Ms": 0.465,
+      "p99Ms": 1.386
     }
   ]
 }

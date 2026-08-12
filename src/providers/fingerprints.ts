@@ -95,6 +95,93 @@ function register(fingerprint: ModelFingerprint): void {
 }
 
 // ── Anthropic Claude ─────────────────────────────────────────────────────────
+// As of July 2026: Claude Opus 4.8 (May), Claude Sonnet 5 (Jun),
+// Claude Fable 5 & Mythos 5 (Jun), Claude Haiku 4.5 (Oct 2025)
+register({
+	modelName: "anthropic/claude-opus-4.8",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 1_000_000,
+	maxOutputTokens: 65_536,
+	inputCostPerMillion: 15.0,
+	outputCostPerMillion: 75.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "anthropic/claude-sonnet-5",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 1_000_000,
+	maxOutputTokens: 65_536,
+	inputCostPerMillion: 3.0,
+	outputCostPerMillion: 15.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "anthropic/claude-opus-4.7",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 1_000_000,
+	maxOutputTokens: 65_536,
+	inputCostPerMillion: 15.0,
+	outputCostPerMillion: 75.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "anthropic/claude-opus-4.6",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 1_000_000,
+	maxOutputTokens: 65_536,
+	inputCostPerMillion: 15.0,
+	outputCostPerMillion: 75.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "anthropic/claude-opus-4.5",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 200_000,
+	maxOutputTokens: 8_192,
+	inputCostPerMillion: 15.0,
+	outputCostPerMillion: 75.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "anthropic/claude-sonnet-4.6",
+	provider: "anthropic",
+	attentionBiases: CLAUDE_BIAS,
+	optimalStructure: CLAUDE_STRUCTURE,
+	contextWindow: 1_000_000,
+	maxOutputTokens: 65_536,
+	inputCostPerMillion: 3.0,
+	outputCostPerMillion: 15.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+// Keep legacy Claude 4 models
 register({
 	modelName: "anthropic/claude-4-opus",
 	provider: "anthropic",
@@ -138,6 +225,93 @@ register({
 });
 
 // ── OpenAI GPT ───────────────────────────────────────────────────────────────
+// As of July 2026: GPT-5.6 (Jun/Jul 2026) with Luna/Terra/Sol variants,
+// GPT-5.5 (Apr 2026), GPT-5.4, GPT-5.3-Codex
+register({
+	modelName: "openai/gpt-5.6-sol",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 64_000,
+	inputCostPerMillion: 2.0,
+	outputCostPerMillion: 8.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "openai/gpt-5.6-terra",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 64_000,
+	inputCostPerMillion: 1.0,
+	outputCostPerMillion: 4.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "openai/gpt-5.6-luna",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 32_000,
+	inputCostPerMillion: 0.4,
+	outputCostPerMillion: 1.6,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "openai/gpt-5.5-pro",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 64_000,
+	inputCostPerMillion: 15.0,
+	outputCostPerMillion: 60.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "openai/gpt-5.5",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 64_000,
+	inputCostPerMillion: 3.0,
+	outputCostPerMillion: 12.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+register({
+	modelName: "openai/gpt-5.3-codex",
+	provider: "openai",
+	attentionBiases: GPT_BIAS,
+	optimalStructure: GPT_STRUCTURE,
+	contextWindow: 400_000,
+	maxOutputTokens: 64_000,
+	inputCostPerMillion: 6.0,
+	outputCostPerMillion: 24.0,
+	supportsStreaming: true,
+	supportsVision: true,
+	supportsToolUse: true,
+});
+
+// Keep legacy GPT-5 Turbo
 register({
 	modelName: "openai/gpt-5-turbo",
 	provider: "openai",
@@ -408,9 +582,94 @@ export function reorderPromptForModel(
 	return ordered.join("\n\n");
 }
 
+// ─── Dynamic Fingerprint Catalog ─────────────────────────────────────────────
+
+/**
+ * Remote catalog URL for model fingerprints. When a model is not found
+ * in the local FINGERPRINTS map, the system fetches its fingerprint from
+ * this catalog and caches it locally for future lookups.
+ *
+ * The catalog is a simple JSON endpoint that returns an array of
+ * ModelFingerprint objects. It is fetched lazily — only when a model
+ * is not found locally.
+ */
+const FINGERPRINT_CATALOG_URL =
+	"https://raw.githubusercontent.com/Markgatcha/llm-guardian/main/src/providers/fingerprints-catalog.json";
+
+/** Cache for dynamically fetched fingerprints. */
+const dynamicCache: Map<string, ModelFingerprint> = new Map();
+/** Timestamp of the last catalog fetch (ms). */
+let lastCatalogFetch = 0;
+/** Catalog fetch interval — don't re-fetch more than once per hour. */
+const CATALOG_REFRESH_INTERVAL = 60 * 60 * 1000;
+
+/**
+ * Fetch model fingerprints from the remote catalog and cache them locally.
+ * This allows new models to be supported without a code release.
+ *
+ * The catalog is fetched at most once per hour. If the fetch fails,
+ * the local cache is used (which may be empty for new models).
+ */
+export async function refreshFingerprintCatalog(): Promise<void> {
+	const now = Date.now();
+	if (now - lastCatalogFetch < CATALOG_REFRESH_INTERVAL) {
+		return; // Don't re-fetch too frequently.
+	}
+
+	try {
+		const response = await fetch(FINGERPRINT_CATALOG_URL, {
+			signal: AbortSignal.timeout(5000), // 5s timeout
+		});
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+		const fingerprints = (await response.json()) as ModelFingerprint[];
+		for (const fp of fingerprints) {
+			const key = fp.modelName.toLowerCase();
+			if (!FINGERPRINTS.has(key)) {
+				dynamicCache.set(key, fp);
+				// Also register without provider prefix.
+				const shortName = fp.modelName.split("/").pop()?.toLowerCase();
+				if (shortName) {
+					dynamicCache.set(shortName, fp);
+				}
+			}
+		}
+		lastCatalogFetch = now;
+	} catch {
+		// Catalog fetch failed — fall back to local fingerprints only.
+		// This is non-fatal; new models just won't have fingerprints.
+	}
+}
+
+/**
+ * Get a model fingerprint, checking both local and dynamic caches.
+ * If the model is not found locally, attempts to fetch from the remote
+ * catalog (cached for 1 hour).
+ */
+export async function getModelFingerprintAsync(
+	modelName: string,
+): Promise<ModelFingerprint | null> {
+	// Check local fingerprints first (fastest).
+	const local = getModelFingerprint(modelName);
+	if (local) return local;
+
+	// Check dynamic cache.
+	const key = modelName.toLowerCase();
+	if (dynamicCache.has(key)) {
+		return dynamicCache.get(key)!;
+	}
+
+	// Try fetching from the remote catalog.
+	await refreshFingerprintCatalog();
+	return dynamicCache.get(key) ?? null;
+}
+
 export default {
 	getModelFingerprint,
 	getAllFingerprints,
 	getCheapestModel,
 	reorderPromptForModel,
+	refreshFingerprintCatalog,
+	getModelFingerprintAsync,
 };

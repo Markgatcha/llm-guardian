@@ -14,6 +14,12 @@ import {
 } from "../gateway/budget-manager.ts";
 import { getAllFingerprints } from "../providers/fingerprints.ts";
 import { configure as configureProvider } from "../providers/openrouter-adapter.ts";
+import { renderSplash } from "./splash.ts";
+import { theme } from "./theme.ts";
+import * as ui from "./ui.ts";
+
+/** Single source of truth for every version string the CLI prints. */
+const VERSION = "1.6.26";
 
 // ─── CLI Definition ──────────────────────────────────────────────────────────
 
@@ -24,7 +30,7 @@ program
 	.description(
 		"LLM-Guardian — Zero-config token optimization with Semantic Folding",
 	)
-	.version("1.0.0");
+	.version(VERSION);
 
 // ─── --start ─────────────────────────────────────────────────────────────────
 
@@ -91,7 +97,7 @@ program
 
 		// Health check
 		app.get("/health", (c) =>
-			c.json({ status: "ok", version: "1.0.0", runtime: "bun" }),
+			c.json({ status: "ok", version: VERSION, runtime: "bun" }),
 		);
 
 		// OpenAI-compatible proxy
@@ -256,13 +262,30 @@ program
 			return c.json(result);
 		});
 
-		console.log(`
- ╔══════════════════════════════════════════════╗
- ║  LLM-Guardian v1.0.0                        ║
- ║  Nervous System Online                      ║
- ║  http://localhost:${port}                      ║
- ╚══════════════════════════════════════════════╝
-    `);
+		// Startup banner — the same visual grammar as the splash, compacted to
+		// a single slab so it doesn't clear the scrollback the server logs into.
+		ui.blank();
+		ui.wordmark("guardian");
+		ui.blank();
+		ui.panel([
+			[
+				["Serving", "bold"],
+				[" · ", "faint"],
+				[`http://localhost:${port}`, "text"],
+				["  ", "faint"],
+				[useLocal ? "local runtime" : "OpenRouter", "faint"],
+			],
+		]);
+		ui.blank();
+		ui.keys([
+			["GET /health", "liveness"],
+			["POST /v1/chat/completions", "proxy"],
+		]);
+		ui.blank();
+		ui.tip("guardian dash", "to open the analytics dashboard");
+		ui.blank();
+		ui.footer(VERSION);
+		ui.blank();
 
 		Bun.serve({
 			port,
@@ -278,7 +301,6 @@ program
 	.option("-p, --port <port>", "Dashboard port", "5173")
 	.action(async (opts) => {
 		const port = parseInt(opts.port, 10);
-		console.log(`Starting Guardian Dashboard on http://localhost:${port}...`);
 
 		// Serve the built dashboard
 		const dashboardDir = `${import.meta.dir}/../dashboard`;
@@ -309,7 +331,21 @@ program
 			},
 		});
 
-		console.log(`Dashboard: http://localhost:${port}`);
+		ui.blank();
+		ui.wordmark("guardian");
+		ui.blank();
+		ui.panel([
+			[
+				["Dashboard", "bold"],
+				[" \u00b7 ", "faint"],
+				[`http://localhost:${port}`, "text"],
+			],
+		]);
+		ui.blank();
+		ui.tip("guardian start", "to feed it live traffic");
+		ui.blank();
+		ui.footer(VERSION);
+		ui.blank();
 	});
 
 // ─── --optimize ──────────────────────────────────────────────────────────────
@@ -321,31 +357,79 @@ program
 	.action((text: string, opts) => {
 		const maxTokens = parseInt(opts.maxTokens, 10);
 		const result = foldText(text, { maxTokens });
+		const m = result.metadata;
 
-		console.log(`\n Semantic Folding Results\n${"─".repeat(50)}`);
-		console.log(`Original tokens:  ${result.metadata.originalTokens}`);
-		console.log(`Folded tokens:    ${result.metadata.foldedTokens}`);
-		console.log(
-			`Compression:      ${(result.metadata.compressionRatio * 100).toFixed(1)}%`,
+		// Headline result goes in the slab — same grammar as the splash's
+		// status line — with the detail table below it in the inline grammar.
+		//
+		// Note on the percentage: `compressionRatio` is folded/original (the
+		// fraction RETAINED), so the reduction the user cares about is its
+		// complement. Reporting the raw ratio as "smaller" would invert it.
+		const reductionPct = (1 - m.compressionRatio) * 100;
+		ui.blank();
+		ui.panel([
+			[
+				["Folded", "bold"],
+				[" \u00b7 ", "faint"],
+				[`${m.originalTokens} \u2192 ${m.foldedTokens} tokens`, "text"],
+				["  ", "faint"],
+				[`${reductionPct.toFixed(1)}% smaller`, "faint"],
+			],
+		]);
+		ui.blank();
+		ui.stat(
+			"semantic density",
+			`${(m.semanticDensity * 100).toFixed(1)}%`,
+			theme.info,
 		);
-		console.log(
-			`Semantic density: ${(result.metadata.semanticDensity * 100).toFixed(1)}%`,
-		);
-		console.log(`Folding time:     ${result.foldingTimeMs.toFixed(2)}ms`);
-		console.log(
-			`Entities:         ${result.metadata.entities.join(", ") || "none"}`,
-		);
-		console.log(
-			`Actions:          ${result.metadata.actions.join(", ") || "none"}`,
-		);
-		console.log(`Headline:         ${result.metadata.headline || "none"}`);
-		console.log(`\n Folded Output\n${"─".repeat(50)}`);
+		ui.stat("folding time", `${result.foldingTimeMs.toFixed(2)}ms`);
+		ui.stat("entities", m.entities.join(", ") || "none");
+		ui.stat("actions", m.actions.join(", ") || "none");
+		ui.stat("headline", m.headline || "none");
+		ui.blank();
+		ui.rule();
+		ui.blank();
 		console.log(result.foldedPrompt);
-		console.log("");
+		ui.blank();
 	});
 
 // ─── Parse ───────────────────────────────────────────────────────────────────
 
-program.parse();
+// A bare `guardian` with no subcommand mounts the interactive TUI rather than
+// dumping commander's usage text. Any actual command falls through to
+// commander. The TUI is imported lazily so `guardian start` never pays the cost
+// of loading the renderer or its native library.
+//
+// The starting model comes from GUARDIAN_MODEL, defaulting to Claude Sonnet via
+// the Anthropic route (which the gateway proxies through OpenRouter). `/model`
+// switches it at runtime.
+if (process.argv.length <= 2) {
+	const startModel =
+		process.env.GUARDIAN_MODEL || "anthropic/claude-sonnet-4-5";
+	if (process.stdout.isTTY) {
+		const { runTui } = await import("./tui.ts");
+		await runTui({
+			version: VERSION,
+			model: startModel,
+			provider: process.env.OPENROUTER_API_KEY ? "OpenRouter" : "not connected",
+		});
+	} else {
+		// Piped or redirected: a live renderer has nothing to attach to, so
+		// print the static splash frame instead. Keeps `guardian | head` and CI
+		// logs useful rather than erroring on a missing TTY.
+		renderSplash({
+			version: VERSION,
+			provider: process.env.OPENROUTER_API_KEY ? "OpenRouter" : "not connected",
+			tipCommand: process.env.OPENROUTER_API_KEY
+				? "guardian start"
+				: "guardian start --lm-studio",
+			tipText: process.env.OPENROUTER_API_KEY
+				? "to launch the gateway and start saving tokens"
+				: "to connect a local runtime and start saving tokens",
+		});
+	}
+} else {
+	program.parse();
+}
 
 export default program;

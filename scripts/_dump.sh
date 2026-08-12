@@ -1,0 +1,1 @@
+cd ~/llm-guardian && echo "=====FULL response-cache.ts=====" && cat -n src/core/response-cache.ts && echo "=====HEAD of file (cat -A lines 1-60)=====" && sed -n '1,60p' src/core/response-cache.ts | cat -A
