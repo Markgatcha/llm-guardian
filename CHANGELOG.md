@@ -1,4 +1,15 @@
-# llm-guardian v1.7
+# llm-guardian v1.7.0
+
+## [Unreleased]
+
+### Dependencies Updated
+
+- `@biomejs/biome` 2.5.6 → 2.5.8 (latest)
+- `@biomejs/cli-linux-x64` 2.5.6 → 2.5.8 (latest)
+- `@opentui/core` 0.5.1 → 0.5.3 (latest)
+- `hono` 4.13.0 → 4.13.2 (latest)
+- `nanoid` 6.0.0 → 6.0.1 (latest)
+- `openai` 7.3.0 → 7.4.0 (latest)
 
 ## Added
 

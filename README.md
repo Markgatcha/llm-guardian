@@ -1,4 +1,4 @@
-# LLM-Guardian v1.6.26
+# LLM-Guardian v1.7.0
 
 [![npm version](https://img.shields.io/npm/v/llm-guardian?logo=npm&color=cb3837)](https://www.npmjs.com/package/llm-guardian)
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
@@ -28,7 +28,7 @@ Together they cover transport + tools (UMT), memory + persistence (MemOS), and L
 
 ## What It Does
 
-LLM-Guardian sits between your application and LLM providers, compressing prompts by 80-95% while preserving semantic quality. v1.6.26 adds four new techniques — drawn from the [Hermes agent](https://github.com/NousResearch/hermes-agent) and the official prompt-caching betas — that cut tokens *before* a single request leaves your machine.
+LLM-Guardian sits between your application and LLM providers, compressing prompts by 80-95% while preserving semantic quality. v1.7.0 adds the Interactive Chat TUI, response caching, dynamic fingerprint catalog, streaming optimization pipeline, and dependency updates.
 
 | Feature | Description |
 |---|---|
@@ -317,7 +317,7 @@ bun run src/cli/index.ts dash --port 5173
 |---|---|---|
 | **Mem-OS** | Persistent memory layer | Active |
 | **Universal-MCP-Toolkit** | Tool orchestration (MCP) | Active |
-| **LLM-Guardian** | Token optimization & cost control | **v1.6.26** |
+| **LLM-Guardian** | Token optimization & cost control | **v1.7.0** |
 
 Together, the Trio provides a complete local AI stack: memory, tools, and cost-optimized inference.
 
