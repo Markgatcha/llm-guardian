@@ -15,10 +15,12 @@
   Measured: 99 core tests drop from 1269ms → 307ms (4.1× faster).
 - **`bun run --parallel`** — new `bench:all` script runs all benchmarks in
   parallel.
-- **`bunfig.toml` tuned for Bun 1.4** — `isolate = true` for test sandboxing,
-  cache `compile = "compile"` with `sourcemap = "linked"` (near-free in 1.4).
-- **`--parallel` test isolation** — tests use `isolate = true` with `isolate = true`
-  for per-file isolation, ensuring the cached fingerprint snapshot doesn't leak.
+- **`bunfig.toml` cleaned for Bun 1.4** — only documented keys remain:
+  `[test] preload`, `[run] bun = true`, `[install]` flags. An earlier pass had
+  added `[cache]` / `[compile]` sections and a `[test] isolate` key that do not
+  exist in Bun's config schema (verified against bun.com/docs/runtime/bunfig);
+  they were silently inert and have been removed so the file reflects real
+  behavior. Parallel test execution comes from the `--parallel` CLI flag.
 - **`Bun.SHA256` for cache keys** — `response-cache.ts` replaced
   `node:crypto.createHash("sha256")` with `new Bun.SHA256().update(...).digest("hex")`,
   a native zero-copy hash that avoids the node:crypto wrapper overhead. ~2-3× faster
@@ -42,6 +44,16 @@
 - **Startup** — CLI cold start on Windows drops from ~393ms (Bun 1.3.14) to
   ~103ms (Bun 1.4.0) — 3.8× faster, exceeding the 2.5× improvement from the
   runtime itself (the fingerprint snapshot cache contributes additional gains).
+
+### CI & Lockfile
+
+- **CI bumped to Bun 1.4.0** — `ci.yml` (both jobs) and `release.yml` now pin
+  `bun-version: "1.4.0"`, matching `engines.bun >=1.4.0`. CI was still running
+  1.3.14 after the runtime bump, so the lockfile check and tests ran on a
+  different Bun major than local development.
+- **`bun.lock` re-synced** — the lockfile had drifted from `package.json`
+  (`bun dedupe` refused to run until `bun install` regenerated it). Regenerated
+  and verified with `bun dedupe`: 59 packages, zero duplicate resolutions.
 
 ### Dependencies Updated
 
