@@ -22,8 +22,9 @@
 //
 // The provider boundary is the OpenAI-compatible chat-completions format, so
 // OpenRouter, OpenAI, Anthropic (via the OpenRouter proxy), and local runtimes
-// all work through the same path. `/model <id>` switches the active model;
-// `/clear` resets the conversation.
+// all work through the same path. `/models` opens an interactive picker over
+// the full model catalog (static fingerprints + live OpenRouter listing);
+// `/model <id>` switches directly by id; `/clear` resets the conversation.
 //
 // Layout tree
 // -----------
@@ -57,6 +58,11 @@ import {
 	createChatSession,
 	summarizeTurn,
 } from "./chat-session.ts";
+import {
+	type ModelListing,
+	type ModelPickerHandles,
+	createModelPicker,
+} from "./model-picker.ts";
 
 /** Slab and hints width as a fraction of the viewport. */
 const PANEL_PERCENT = "47%" as const;
@@ -71,8 +77,22 @@ export type TuiOptions = {
 	model?: string;
 	/** Provider label, shown dimmest when idle. */
 	provider?: string;
+	/**
+	 * Custom OpenAI-compatible base URL. When set, the chat session pins every
+	 * request to this endpoint (model IDs sent unchanged, ambient keys not
+	 * forwarded) — used for LM Studio / Ollama / self-hosted servers.
+	 */
+	baseUrl?: string;
+	/** API key for the custom endpoint. Omit for keyless local runtimes. */
+	apiKey?: string;
 	/** Injectable session factory — tests stub the network here. */
 	createSession?: (model: string) => ChatSession;
+	/**
+	 * Injectable model source for the `/models` picker. Defaults to the real
+	 * catalog (static fingerprints + live OpenRouter listing); tests inject a
+	 * static list so the picker runs offline.
+	 */
+	listModels?: () => Promise<ModelListing[]>;
 };
 
 /**
@@ -110,6 +130,8 @@ export type TuiHandles = {
 	wordmark: BoxRenderable;
 	transcript: ScrollBoxRenderable;
 	session: ChatSession;
+	/** The model picker overlay — tests drive `/models` through this. */
+	picker: ModelPickerHandles;
 	/** Submit the input's current value, as pressing enter would. */
 	submit: () => Promise<void>;
 };
@@ -142,9 +164,13 @@ function parseCommand(text: string): { name: string; arg: string } | null {
 export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	const { version, model: startModel = "anthropic/claude-sonnet-4-5" } = opts;
 
-	const session = (opts.createSession ?? ((m) => createChatSession({ model: m })))(
-		startModel,
-	);
+	const session = (opts.createSession ??
+		((m) =>
+			createChatSession({
+				model: m,
+				baseUrl: opts.baseUrl,
+				apiKey: opts.apiKey,
+			})))(startModel);
 
 	// ─── Layout ──────────────────────────────────────────────────────────────
 
@@ -257,7 +283,7 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	hints.add(
 		new TextRenderable(renderer, {
 			id: "hints-text",
-			content: "enter send   /model   /clear   ctrl+c quit",
+			content: "enter send   /models   /model   /clear   ctrl+c quit",
 			fg: palette.textMuted,
 		}),
 	);
@@ -305,6 +331,25 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	};
 	showIdleStatus();
 
+	// The model picker overlay. Selecting a model routes it straight into the
+	// session and refreshes the status/tip lines, exactly like `/model <id>`.
+	const picker = createModelPicker(renderer, {
+		listModels:
+			opts.listModels ??
+			(async () => {
+				const { listAllModels } = await import("../providers/dynamic-models.ts");
+				return listAllModels();
+			}),
+		onSelect: (modelId) => {
+			session.setModel(modelId);
+			tip.content = `\u25cf ${session.provider}`;
+			showIdleStatus();
+			status.content = `model \u00b7 ${session.model}`;
+			status.fg = palette.info;
+			input.focus();
+		},
+	});
+
 	let busy = false;
 	/** Monotonic id source for transcript lines — never resets, even on /clear. */
 	let lineSeq = 0;
@@ -336,6 +381,14 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		const cmd = parseCommand(text);
 		if (!cmd) return false;
 
+		if (cmd.name === "/models") {
+			// Open the picker overlay; it takes over key handling until the
+			// user selects a model or presses Escape.
+			input.blur();
+			picker.open();
+			return true;
+		}
+
 		if (cmd.name === "/model") {
 			if (!cmd.arg) {
 				status.content = `current model \u00b7 ${session.model}`;
@@ -364,7 +417,7 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 			return true;
 		}
 
-		status.content = `unknown command ${cmd.name} \u2014 /model, /clear`;
+		status.content = `unknown command ${cmd.name} \u2014 /models, /model, /clear`;
 		status.fg = palette.warning;
 		return true;
 	};
@@ -421,7 +474,7 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		void submit();
 	});
 
-	return { input, status, tip, slab, wordmark, transcript, session, submit };
+	return { input, status, tip, slab, wordmark, transcript, session, picker, submit };
 }
 
 /**
@@ -448,6 +501,11 @@ export async function runTui(opts: TuiOptions): Promise<void> {
 		};
 
 		renderer.keyInput.on("keypress", (key: KeyEvent) => {
+			// The model picker consumes Escape to close itself and calls
+			// preventDefault(); honor that so Escape closes the picker instead
+			// of quitting the whole TUI. Ctrl+C is never consumed by the
+			// picker, so it still quits here.
+			if (key.defaultPrevented) return;
 			if (isQuitKey(key)) shutdown();
 		});
 

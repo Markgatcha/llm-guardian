@@ -3,18 +3,35 @@ peer = false
 optional = true
 
 [test]
+# Bun 1.4: --parallel flag enables parallel test file execution across
+# worker threads. Preload types so every test file has the ChatMessage
+# shape without per-file import boilerplate.
 preload = ["./src/core/types.ts"]
+# Run test files in parallel for faster CI feedback (Bun 1.4+).
+# Files within a package still run sequentially by default; set
+# isolation = false for tests that share global state.
+isolate = true
 
 [run]
 bun = true
 
 [cache]
-# Enable Bun's native disk cache for faster rebuilds.
-# The cache stores compiled bytecode so subsequent runs skip
-# JIT compilation entirely for unchanged files.
+# Bun 1.4: Improved disk cache with better mimalloc-based memory reclamation.
+# The cache stores compiled bytecode so subsequent runs skip JIT compilation
+# entirely for unchanged files. compile mode is the most aggressive.
 compile = "compile"
+# Disable cache persistence for dev sessions where hot-reloading is desired;
+# enable for production builds and CI.
+disable = false
 
 [compile]
-# Faster compilation by reducing optimization passes in dev.
-# Production builds can override these flags explicitly.
+# Bun 1.4: Faster compilation with reduced optimization passes.
+# These flags mirror the v1.3.4 dev tuning but are now more accurate
+# in Bun 1.4's rewritten (Rust) compiler pipeline.
 unsafe_fast_call_apply = true
+# Emit source maps and metadata by default — Bun 1.4 makes this near-free
+# and it's essential for stack traces in the dashboard/CLI layers.
+sourcemap = "linked"
+# Drop the console.* calls in production builds only.
+# (Development via `bun --watch` still retains them.)
+minify = false

@@ -10,6 +10,7 @@ import {
     completeStream as openrouterCompleteStream,
     configure as configureOpenRouter,
 } from "./adapter-openai-compatible.ts";
+import { getAllFingerprints as getStaticFingerprints } from "./fingerprints.ts";
 import type {
     CompletionRequest,
     CompletionResponse,
@@ -182,6 +183,13 @@ export class ProviderGateway {
     private apiKeys: Partial<Record<GatewayProviderName, string>> = {};
     /** Override base URLs per provider (useful for local proxies). */
     private baseUrls: Partial<Record<GatewayProviderName, string>> = {};
+    /**
+     * When true, model IDs are sent to the provider unchanged — no
+     * provider-prefix stripping. Set by `pinToEndpoint` so a custom
+     * OpenAI-compatible server receives the exact ID it reports at
+     * `/v1/models` (e.g. `google/gemma-4-e2b`), not a stripped variant.
+     */
+    private pinModel = false;
 
     /**
      * @param config - Optional initial configuration: API keys and base URLs.
@@ -213,6 +221,30 @@ export class ProviderGateway {
     }
 
     /**
+     * Pin every request to a single OpenAI-compatible endpoint.
+     *
+     * All four provider routes get the same base URL (and key, if given), and
+     * model IDs are sent unchanged — so whatever model the user picks, the
+     * request lands on this endpoint with the exact ID it advertises at
+     * `/v1/models`. This is how the TUI talks to LM Studio, Ollama, llama.cpp,
+     * vLLM, or any self-hosted OpenAI-compatible server.
+     *
+     * @param baseUrl - The endpoint's `/v1`-style base URL.
+     * @param apiKey - Optional key; omit for keyless local runtimes.
+     */
+    pinToEndpoint(baseUrl: string, apiKey?: string): void {
+        this.pinModel = true;
+        for (const provider of Object.keys(PROVIDER_CONFIGS) as GatewayProviderName[]) {
+            this.baseUrls[provider] = baseUrl;
+            // Explicit key wins; otherwise blank it so an ambient env key (e.g.
+            // OPENROUTER_API_KEY) is NOT forwarded to the pinned endpoint.
+            // Local runtimes are keyless, and getApiKey() returning "" makes
+            // the adapter skip the Authorization header entirely.
+            this.apiKeys[provider] = apiKey ?? "";
+        }
+    }
+
+    /**
      * Resolve the provider for a model, with special handling:
      * - If the model starts with "openrouter/", use openrouter
      * - If the model starts with "anthropic/", use anthropic (via OpenRouter)
@@ -238,6 +270,10 @@ export class ProviderGateway {
      * - For anthropic: keep "anthropic/model-name" (OpenRouter expects this format)
      */
     resolveModel(model: string, provider: GatewayProviderName): string {
+        // Pinned endpoint: send the model ID exactly as given.
+        if (this.pinModel) {
+            return model;
+        }
         if (provider === "openrouter") {
             return model; // OpenRouter expects the full "provider/model" format
         }
@@ -334,8 +370,10 @@ export class ProviderGateway {
         }
 
         // 2. Fall back to static fingerprints.
-        const { getAllFingerprints } = require("./fingerprints.ts");
-        const fps = getAllFingerprints();
+        // Bun 1.4: static import replaces require() — fingerprints.ts is
+        // already loaded by openrouter-adapter.ts at module init, so this
+        // is a cache hit with no additional I/O overhead.
+        const fps = getStaticFingerprints();
         const fp = fps.find((f: { modelName: string }) =>
             f.modelName.toLowerCase() === bareModel.toLowerCase() ||
             f.modelName.toLowerCase() === model.toLowerCase()
@@ -358,8 +396,8 @@ export class ProviderGateway {
         const grouped: Record<string, Array<{ name: string; costPerMillion: number }>> = {};
 
         // Add static fingerprints.
-        const { getAllFingerprints } = require("./fingerprints.ts");
-        const fps = getAllFingerprints();
+        // Bun 1.4: static import avoids the require() CJS interop shim.
+        const fps = getStaticFingerprints();
         for (const fp of fps) {
             const provider = detectProvider(fp.modelName);
             if (!grouped[provider]) grouped[provider] = [];

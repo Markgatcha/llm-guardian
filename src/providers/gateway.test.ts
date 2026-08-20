@@ -105,3 +105,29 @@ describe("ProviderGateway dynamic pricing", () => {
     }
   });
 });
+
+// ─── pinToEndpoint tests ─────────────────────────────────────────────────────
+
+describe("ProviderGateway.pinToEndpoint", () => {
+  it("sends model IDs unchanged once pinned", () => {
+    const gateway = new ProviderGateway();
+    // Before pinning, a prefixed model is stripped for non-openrouter routes.
+    expect(gateway.resolveModel("openai/gpt-5.5", "openai")).toBe("gpt-5.5");
+
+    gateway.pinToEndpoint("http://127.0.0.1:1234/v1");
+    // After pinning, the exact ID is preserved for every provider route.
+    expect(gateway.resolveModel("openai/gpt-5.5", "openai")).toBe("openai/gpt-5.5");
+    expect(gateway.resolveModel("google/gemma-4-e2b", "openai")).toBe("google/gemma-4-e2b");
+    expect(gateway.resolveModel("anthropic/claude-sonnet-4-5", "anthropic")).toBe(
+      "anthropic/claude-sonnet-4-5",
+    );
+  });
+
+  it("does not affect an unpinned gateway", () => {
+    const gateway = new ProviderGateway();
+    // No pin call — normal prefix stripping still applies.
+    expect(gateway.resolveModel("anthropic/claude-sonnet-4-5", "anthropic")).toBe(
+      "claude-sonnet-4-5",
+    );
+  });
+});

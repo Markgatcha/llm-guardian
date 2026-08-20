@@ -17,9 +17,10 @@ import { configure as configureProvider } from "../providers/openrouter-adapter.
 import { renderSplash } from "./splash.ts";
 import { theme } from "./theme.ts";
 import * as ui from "./ui.ts";
+import pkg from "../../package.json";
 
 /** Single source of truth for every version string the CLI prints. */
-const VERSION = "1.6.26";
+const VERSION = pkg.version;
 
 // ─── CLI Definition ──────────────────────────────────────────────────────────
 
@@ -395,23 +396,71 @@ program
 
 // ─── Parse ───────────────────────────────────────────────────────────────────
 
-// A bare `guardian` with no subcommand mounts the interactive TUI rather than
-// dumping commander's usage text. Any actual command falls through to
-// commander. The TUI is imported lazily so `guardian start` never pays the cost
-// of loading the renderer or its native library.
+/**
+ * Flags accepted by the bare interactive TUI invocation.
+ *
+ * `guardian` with no subcommand mounts the chat TUI; these flags configure it
+ * without going through commander (which only knows the subcommands). Both
+ * `--flag value` and `--flag=value` forms are accepted.
+ */
+function parseTuiFlags(argv: string[]): {
+	model?: string;
+	baseUrl?: string;
+	apiKey?: string;
+} {
+	const out: { model?: string; baseUrl?: string; apiKey?: string } = {};
+	const value = (argv: string[], i: number): string | undefined => argv[i + 1];
+	for (let i = 2; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--model" || arg === "-m") {
+			out.model = value(argv, i++);
+		} else if (arg.startsWith("--model=")) {
+			out.model = arg.slice("--model=".length);
+		} else if (arg === "--base-url") {
+			out.baseUrl = value(argv, i++);
+		} else if (arg.startsWith("--base-url=")) {
+			out.baseUrl = arg.slice("--base-url=".length);
+		} else if (arg === "--lm-studio") {
+			// Same shorthand as `guardian start --lm-studio`.
+			out.baseUrl = "http://127.0.0.1:1234/v1";
+		} else if (arg === "--api-key" || arg === "-k") {
+			out.apiKey = value(argv, i++);
+		} else if (arg.startsWith("--api-key=")) {
+			out.apiKey = arg.slice("--api-key=".length);
+		}
+	}
+	return out;
+}
+
+// A bare `guardian` (or `guardian --model …` / `guardian --lm-studio`) mounts
+// the interactive TUI rather than dumping commander's usage text. A first
+// argument that is NOT a flag is treated as a subcommand and falls through to
+// commander. The TUI is imported lazily so `guardian start` never pays the
+// cost of loading the renderer or its native library.
 //
-// The starting model comes from GUARDIAN_MODEL, defaulting to Claude Sonnet via
-// the Anthropic route (which the gateway proxies through OpenRouter). `/model`
-// switches it at runtime.
-if (process.argv.length <= 2) {
+// The starting model comes from --model, then GUARDIAN_MODEL, defaulting to
+// Claude Sonnet via the Anthropic route (which the gateway proxies through
+// OpenRouter). `/models` opens the picker; `/model <id>` switches directly.
+const firstArg = process.argv[2];
+const isSubcommand = !!firstArg && !firstArg.startsWith("-");
+
+if (!isSubcommand) {
+	const flags = parseTuiFlags(process.argv);
 	const startModel =
-		process.env.GUARDIAN_MODEL || "anthropic/claude-sonnet-4-5";
+		flags.model || process.env.GUARDIAN_MODEL || "anthropic/claude-sonnet-4-5";
+	const providerLabel = flags.baseUrl
+		? "local endpoint"
+		: process.env.OPENROUTER_API_KEY
+			? "OpenRouter"
+			: "not connected";
 	if (process.stdout.isTTY) {
 		const { runTui } = await import("./tui.ts");
 		await runTui({
 			version: VERSION,
 			model: startModel,
-			provider: process.env.OPENROUTER_API_KEY ? "OpenRouter" : "not connected",
+			baseUrl: flags.baseUrl,
+			apiKey: flags.apiKey,
+			provider: providerLabel,
 		});
 	} else {
 		// Piped or redirected: a live renderer has nothing to attach to, so
@@ -419,7 +468,7 @@ if (process.argv.length <= 2) {
 		// logs useful rather than erroring on a missing TTY.
 		renderSplash({
 			version: VERSION,
-			provider: process.env.OPENROUTER_API_KEY ? "OpenRouter" : "not connected",
+			provider: providerLabel,
 			tipCommand: process.env.OPENROUTER_API_KEY
 				? "guardian start"
 				: "guardian start --lm-studio",

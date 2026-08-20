@@ -20,7 +20,7 @@ import { estimateTokens as countTokens } from "../core/token-counter.ts";
 import { shardMessages } from "../core/vcm-sharder.ts";
 import { decideRetain } from "../core/retain-filter.ts";
 import { checkBudget } from "../gateway/budget-manager.ts";
-import { streamComplete } from "../providers/gateway.ts";
+import { streamComplete, ProviderGateway } from "../providers/gateway.ts";
 import { providerFromModel } from "../core/response-cache.ts";
 import { getModelFingerprint } from "../providers/fingerprints.ts";
 import type { ChatMessage } from "../core/types.ts";
@@ -78,6 +78,16 @@ export interface ChatSession {
 export type ChatSessionOptions = {
 	/** Starting model id (e.g. "anthropic/claude-sonnet-4-5"). */
 	model: string;
+	/**
+	 * Custom OpenAI-compatible base URL (e.g. "http://127.0.0.1:1234/v1").
+	 * When set, every request is pinned to this endpoint regardless of the
+	 * model's provider prefix — the whole gateway routes there. Leave unset to
+	 * use the shared gateway, which routes by model prefix (openai /
+	 * anthropic / ollama / openrouter) and reads keys from the environment.
+	 */
+	baseUrl?: string;
+	/** API key for the custom endpoint. Omit for keyless local runtimes. */
+	apiKey?: string;
 	/** Override the completion call — tests inject a stub here. */
 	complete?: (
 		model: string,
@@ -171,11 +181,25 @@ export function createChatSession(opts: ChatSessionOptions): ChatSession {
 	let history: ChatMessage[] = [];
 	let turns = 0;
 
+	// When a custom endpoint is pinned, build a dedicated gateway routed there
+	// (model IDs sent unchanged, ambient keys not forwarded). Otherwise fall
+	// back to the shared gateway, which routes by model prefix and reads keys
+	// from the environment.
+	const pinnedGateway = opts.baseUrl
+		? (() => {
+				const gw = new ProviderGateway();
+				gw.pinToEndpoint(opts.baseUrl as string, opts.apiKey);
+				return gw;
+			})()
+		: null;
+
 	// Injectable so tests stub the network; production wires the gateway.
 	const callStream =
 		opts.completeStream ??
 		((m: string, msgs: ChatMessage[], maxTokens: number) =>
-			streamComplete(m, { messages: msgs, maxTokens }));
+			pinnedGateway
+				? pinnedGateway.completeStream({ model: m, messages: msgs, maxTokens })
+				: streamComplete(m, { messages: msgs, maxTokens }));
 
 	return {
 		get model() {

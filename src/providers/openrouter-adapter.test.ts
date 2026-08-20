@@ -4,6 +4,7 @@ import {
   selectModel,
   complete,
 } from "../providers/openrouter-adapter.ts";
+import { getModelFingerprint } from "../providers/fingerprints.ts";
 
 // Keep a reference so we can restore the real fetch after each test.
 let realFetch: typeof fetch;
@@ -37,7 +38,7 @@ describe("openrouter-adapter", () => {
       const chosen = selectModel("auto", { needsVision: true });
       expect(chosen).not.toBe("auto");
       // The chosen model must support vision.
-      const { getModelFingerprint } = require("../providers/fingerprints.ts");
+      // Bun 1.4: static import of getModelFingerprint (was require() before).
       expect(getModelFingerprint(chosen)?.supportsVision).toBe(true);
     });
 

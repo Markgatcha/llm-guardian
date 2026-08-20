@@ -86,12 +86,21 @@ const GPT_STRUCTURE: PromptSection[] = [
 // ─── Model Database ──────────────────────────────────────────────────────────
 
 const FINGERPRINTS: Map<string, ModelFingerprint> = new Map();
+// Cached snapshot of all fingerprints — invalidated on every register() call.
+// Declared here (before the first register() call at module load) to avoid
+// the temporal dead zone. Bun 1.4: this avoids re-allocating a new array
+// from FINGERPRINTS.values() on every getAllFingerprints() call, which is
+// a hot path in selectModel() + listModels().
+let fingerprintsSnapshot: ModelFingerprint[] | null = null;
 
 function register(fingerprint: ModelFingerprint): void {
 	FINGERPRINTS.set(fingerprint.modelName.toLowerCase(), fingerprint);
 	// Also register without provider prefix
 	const shortName = fingerprint.modelName.split("/").pop()?.toLowerCase();
 	if (shortName) FINGERPRINTS.set(shortName, fingerprint);
+	// Invalidate the cached snapshot so the next getAllFingerprints() call
+	// picks up the new entry.
+	fingerprintsSnapshot = null;
 }
 
 // ── Anthropic Claude ─────────────────────────────────────────────────────────
@@ -535,7 +544,12 @@ export function getModelFingerprint(
 }
 
 export function getAllFingerprints(): ModelFingerprint[] {
-	return [...FINGERPRINTS.values()];
+	// Bun 1.4: cache the array snapshot so repeated calls (e.g. in hot
+	// paths like selectModel + listModels) don't allocate a new array
+	// + spread each time. The snapshot is invalidated on register().
+	if (fingerprintsSnapshot) return fingerprintsSnapshot;
+	fingerprintsSnapshot = [...FINGERPRINTS.values()];
+	return fingerprintsSnapshot;
 }
 
 export function getCheapestModel(

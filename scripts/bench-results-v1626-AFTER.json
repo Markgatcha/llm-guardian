@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-02T04:25:55.376Z",
+  "generatedAt": "2026-08-20T21:42:59.447Z",
   "runtime": "bun 1.4.0",
   "release": "v1.6.26-new-modules",
   "results": [
@@ -8,10 +8,10 @@
       "operation": "token-counting",
       "method": "GPT-style BPE estimator",
       "inputTokens": 1020,
-      "p50Ms": 0.039,
-      "p95Ms": 0.077,
-      "p99Ms": 0.142,
-      "meanMs": 0.047,
+      "p50Ms": 0.021,
+      "p95Ms": 0.036,
+      "p99Ms": 0.053,
+      "meanMs": 0.03,
       "samples": 1000,
       "note": "vs naive char/4 baseline",
       "naiveP50Ms": 0
@@ -38,10 +38,10 @@
         "score": 0.05,
         "reason": "low-signal acknowledgement"
       },
-      "p50Ms": 0.004,
-      "p95Ms": 0.012,
-      "p99Ms": 0.04,
-      "meanMs": 0.007,
+      "p50Ms": 0.002,
+      "p95Ms": 0.004,
+      "p99Ms": 0.006,
+      "meanMs": 0.003,
       "samples": 1000
     },
     {
@@ -53,10 +53,10 @@
       "fullSchemaTokens": 740,
       "gatedSchemaTokens": 117,
       "schemaTokenReduction": 0.842,
-      "p50Ms": 0.067,
-      "p95Ms": 0.167,
-      "p99Ms": 0.24,
-      "meanMs": 0.085,
+      "p50Ms": 0.049,
+      "p95Ms": 0.085,
+      "p99Ms": 0.582,
+      "meanMs": 0.063,
       "samples": 1000
     },
     {
@@ -69,10 +69,10 @@
       "volatileSuffixTokens": 8,
       "cacheEligible": true,
       "estimatedAnthropicSavingsPct": 90,
-      "p50Ms": 0.067,
-      "p95Ms": 0.139,
-      "p99Ms": 0.26,
-      "meanMs": 0.084,
+      "p50Ms": 0.042,
+      "p95Ms": 0.056,
+      "p99Ms": 0.217,
+      "meanMs": 0.051,
       "samples": 1000
     }
   ]

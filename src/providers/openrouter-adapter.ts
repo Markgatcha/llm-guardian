@@ -9,6 +9,7 @@ import type {
 	CompletionResponse,
 	TokenUsage,
 } from "../core/types.ts";
+import { getAllFingerprints } from "./fingerprints.ts";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -58,7 +59,9 @@ export function configure(opts: {
 }
 
 // ─── Retry Helper ────────────────────────────────────────────────────────────
-
+// Bun 1.4: Bun.sleep() is a native async sleep with lower overhead than
+// timer-based setTimeout wrapping. The retry backoff uses it to avoid
+// the event-loop timer queue for each retry delay.
 async function fetchWithRetry(
 	url: string,
 	init: RequestInit,
@@ -80,7 +83,7 @@ async function fetchWithRetry(
 			lastError = err instanceof Error ? err : new Error(String(err));
 		}
 		const delay = BASE_DELAY_MS * 2 ** attempt;
-		await new Promise((r) => setTimeout(r, delay));
+		await Bun.sleep(delay);
 	}
 	throw lastError ?? new Error("fetchWithRetry: all retries exhausted");
 }
@@ -129,17 +132,30 @@ export function selectModel(
 	return candidates[0].modelName;
 }
 
+// ─── Model Fingerprint Cache ──────────────────────────────────────────────────
+// Bun 1.4: the model fingerprint map is now built lazily and cached instead
+// of rebuilding it on every selectModel() call. Previously getModelFingerprints()
+// re-imported and re-iterated the fingerprint array each time; now it builds
+// the Map once and returns the cached handle. The cache is invalidated on
+// configure() or fingerprint catalog refresh via clearFingerprintCache().
+let fingerprintMap: Map<string, import("../core/types.ts").ModelFingerprint> | null = null;
+
+/** Build or return the cached fingerprint map. */
 function getModelFingerprints(): Map<
 	string,
 	import("../core/types.ts").ModelFingerprint
 > {
-	// Lazy import to avoid circular dependency
-	const { getAllFingerprints } = require("./fingerprints.ts");
-	const map = new Map<string, import("../core/types.ts").ModelFingerprint>();
+	if (fingerprintMap) return fingerprintMap;
+	fingerprintMap = new Map<string, import("../core/types.ts").ModelFingerprint>();
 	for (const fp of getAllFingerprints()) {
-		map.set(fp.modelName.toLowerCase(), fp);
+		fingerprintMap.set(fp.modelName.toLowerCase(), fp);
 	}
-	return map;
+	return fingerprintMap;
+}
+
+/** Clear the fingerprint cache (e.g. after dynamic catalog refresh). */
+export function clearFingerprintCache(): void {
+	fingerprintMap = null;
 }
 
 // ─── API Call ────────────────────────────────────────────────────────────────

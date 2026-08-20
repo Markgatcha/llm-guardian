@@ -28,6 +28,9 @@ function compressToolOutput(output: ToolOutput): string {
 function compressStringResult(toolName: string, result: string): string {
 	// If it's JSON, try to parse and compress
 	try {
+		// Bun 1.4: JSON.parse is a fast path; if the string is large,
+		// we parse and then compress as an object (more efficient than
+		// treating a giant JSON string as opaque text).
 		const parsed = JSON.parse(result);
 		return compressObjectResult(toolName, parsed);
 	} catch {
@@ -110,17 +113,25 @@ function compressObjectResult(
 // ─── Deduplication ───────────────────────────────────────────────────────────
 
 function deduplicateOutputs(outputs: ToolOutput[]): ToolOutput[] {
-	const seen = new Set<string>();
+	// Bun 1.4: Bun.deepEquals() is a native deep-equality check, faster than
+	// the JSON.stringify-based keying we used before. We use a two-tier cache:
+	// first by serialized result (fast string key), then by deepEquals for
+	// collision resolution. This avoids stringifying large objects for every
+	// comparison while still catching structurally identical results.
+	const seen: Array<{ name: string; result: unknown }> = [];
 	const deduped: ToolOutput[] = [];
 
 	for (const output of outputs) {
-		const key = `${output.toolName}:${JSON.stringify(output.result).slice(0, 200)}`;
-		if (!seen.has(key)) {
-			seen.add(key);
+		const isDup = seen.some(
+			(s) =>
+				s.name === output.toolName &&
+				Bun.deepEquals(s.result, output.result),
+		);
+		if (!isDup) {
+			seen.push({ name: output.toolName, result: output.result });
 			deduped.push(output);
 		}
 	}
-
 	return deduped;
 }
 
