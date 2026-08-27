@@ -1,107 +1,106 @@
 {
-  "name": "llm-guardian",
-  "version": "1.7.0",
-  "description": "LLM token optimization gateway — Semantic Folding, VCM Sharding, prompt caching, tool gating. 80-95% prompt compression with sub-30ms overhead.",
-  "type": "module",
-  "main": "src/core/orchestrator.ts",
-  "module": "src/core/orchestrator.ts",
-  "types": "src/core/types.ts",
-  "bin": {
-    "guardian": "dist/guardian.js"
-  },
-  "exports": {
-    ".": {
-      "types": "src/core/types.ts",
-      "import": "src/core/orchestrator.ts"
-    },
-    "./folding": {
-      "types": "src/core/folding-engine.ts",
-      "import": "src/core/folding-engine.ts"
-    },
-    "./sharding": {
-      "types": "src/core/vcm-sharder.ts",
-      "import": "src/core/vcm-sharder.ts"
-    },
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "dist/",
-    "src/",
-    "README.md",
-    "LICENSE",
-    "config.example.yaml"
-  ],
-  "sideEffects": false,
-  "keywords": [
-    "llm",
-    "token-optimization",
-    "prompt-compression",
-    "semantic-folding",
-    "vcm-sharding",
-    "ai-gateway",
-    "openai-proxy",
-    "cost-optimization",
-    "prompt-caching",
-    "context-engineering",
-    "anthropic",
-    "openrouter",
-    "guardrails",
-    "token-reduction",
-    "context-window",
-    "bun",
-    "agent-framework",
-    "tool-gating",
-    "ai-trio",
-    "budget-management"
-  ],
-  "author": "Markgatcha",
-  "license": "MIT",
-  "homepage": "https://github.com/Markgatcha/llm-guardian#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Markgatcha/llm-guardian.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Markgatcha/llm-guardian/issues"
-  },
-  "engines": {
-    "bun": ">=1.4.0"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "start": "bun run src/cli/index.ts start server",
-    "dashboard": "bun run src/cli/index.ts dash",
-    "tui": "bun run src/cli/index.ts",
-    "optimize": "bun run src/cli/index.ts optimize",
-    "dev": "bun --watch src/cli/index.ts start server",
-    "build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js --external '@opentui/*'",
-    "bench": "bun run scripts/bench-v1626-modules.ts",
-    "bench:orchestrator": "bun run scripts/bench-orchestrator.ts",
-    "bench:context-loss": "bun run scripts/bench-context-loss.ts",
-    "bench:all": "bun run --parallel bench bench:orchestrator bench:context-loss bench:quality",
-    "bench:quality": "bun run scripts/bench-quality.ts",
-    "test": "bun test src/core src/gateway src/providers --parallel",
-    "test:all": "bun test --parallel",
-    "test:frontend": "(cd frontend && bun install --frozen-lockfile) && (cd frontend && ./node_modules/.bin/vitest run --config ./vite.config.ts --root .)",
-    "lint": "bunx biome check src/",
-    "typecheck": "bunx tsc --noEmit",
-    "prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
-  },
-  "dependencies": {
-    "@opentui/core": "^0.5.3",
-    "commander": "^15.0.0",
-    "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.2",
-    "nanoid": "^6.0.1",
-    "openai": "^7.4.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.8",
-    "@biomejs/cli-linux-x64": "^2.5.8",
-    "@types/bun": "^1.4.0",
-    "typescript": "^7.0.2"
-  }
+	"name": "llm-guardian",
+	"version": "1.7.0",
+	"description": "LLM token optimization gateway — Semantic Folding, VCM Sharding, prompt caching, tool gating. 80-95% prompt compression with sub-30ms overhead.",
+	"type": "module",
+	"main": "src/core/orchestrator.ts",
+	"module": "src/core/orchestrator.ts",
+	"types": "src/core/types.ts",
+	"bin": {
+		"guardian": "dist/guardian.js"
+	},
+	"exports": {
+		".": {
+			"types": "src/core/types.ts",
+			"import": "src/core/orchestrator.ts"
+		},
+		"./folding": {
+			"types": "src/core/folding-engine.ts",
+			"import": "src/core/folding-engine.ts"
+		},
+		"./sharding": {
+			"types": "src/core/vcm-sharder.ts",
+			"import": "src/core/vcm-sharder.ts"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist/",
+		"src/",
+		"README.md",
+		"LICENSE"
+	],
+	"sideEffects": false,
+	"keywords": [
+		"llm",
+		"token-optimization",
+		"prompt-compression",
+		"semantic-folding",
+		"vcm-sharding",
+		"ai-gateway",
+		"openai-proxy",
+		"cost-optimization",
+		"prompt-caching",
+		"context-engineering",
+		"anthropic",
+		"openrouter",
+		"guardrails",
+		"token-reduction",
+		"context-window",
+		"bun",
+		"agent-framework",
+		"tool-gating",
+		"ai-trio",
+		"budget-management"
+	],
+	"author": "Markgatcha",
+	"license": "MIT",
+	"homepage": "https://github.com/Markgatcha/llm-guardian#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Markgatcha/llm-guardian.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Markgatcha/llm-guardian/issues"
+	},
+	"engines": {
+		"bun": ">=1.4.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"start": "bun run src/cli/index.ts start server",
+		"dashboard": "bun run src/cli/index.ts dash",
+		"tui": "bun run src/cli/index.ts",
+		"optimize": "bun run src/cli/index.ts optimize",
+		"dev": "bun --watch src/cli/index.ts start server",
+		"build": "bun build src/cli/index.ts --target bun --outdir dist --entry-naming guardian.js --external '@opentui/*'",
+		"bench": "bun run scripts/bench-v1626-modules.ts",
+		"bench:orchestrator": "bun run scripts/bench-orchestrator.ts",
+		"bench:context-loss": "bun run scripts/bench-context-loss.ts",
+		"bench:all": "bun run --parallel bench bench:orchestrator bench:context-loss bench:quality",
+		"bench:quality": "bun run scripts/bench-quality.ts",
+		"test": "bun test src/core src/gateway src/providers --parallel",
+		"test:all": "bun test --parallel",
+		"test:frontend": "(cd frontend && bun install --frozen-lockfile) && (cd frontend && ./node_modules/.bin/vitest run --config ./vite.config.ts --root .)",
+		"lint": "oxlint src --quiet",
+		"lint:fix": "oxlint src --fix",
+		"typecheck": "bunx tsc --noEmit",
+		"prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
+	},
+	"dependencies": {
+		"@opentui/core": "^0.5.3",
+		"commander": "^15.0.0",
+		"drizzle-orm": "^0.45.2",
+		"hono": "^4.13.2",
+		"nanoid": "^6.0.1",
+		"openai": "^7.4.0",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.0",
+		"oxlint": "^1.78.0",
+		"typescript": "^7.0.2"
+	}
 }
