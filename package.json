@@ -80,7 +80,7 @@
     "bench": "bun run scripts/bench-v1626-modules.ts",
     "bench:orchestrator": "bun run scripts/bench-orchestrator.ts",
     "bench:context-loss": "bun run scripts/bench-context-loss.ts",
-    "bench:all": "bun run --parallel bench:modules bench:orchestrator bench:context-loss bench:quality",
+    "bench:all": "bun run --parallel bench bench:orchestrator bench:context-loss bench:quality",
     "bench:quality": "bun run scripts/bench-quality.ts",
     "test": "bun test src/core src/gateway src/providers --parallel",
     "test:all": "bun test --parallel",

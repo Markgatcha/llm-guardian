@@ -60,3 +60,6 @@ docker-compose.override.yml
 
 # ── Alembic auto-generated (keep versions tracked) ─────────────────────────
 # (nothing to exclude here — versions/ is committed)
+
+# ── Hermes agent state ──────────────────────────────────────────────────────
+.hermes/
