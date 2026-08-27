@@ -1,31 +1,10 @@
-# ── Python ─────────────────────────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
-*.egg-info/
+# ── Build output ─────────────────────────────────────────────────────────────
 dist/
 build/
-.eggs/
-.venv/
-venv/
-env/
-ENV/
-.Python
-pip-wheel-metadata/
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
-*.log
+*.tsbuildinfo
 
 # ── Secrets & local config ──────────────────────────────────────────────────
 .env
-config.yaml
 *.key
 *.pem
 *.p12
@@ -36,12 +15,13 @@ secrets/
 *.sqlite
 *.sqlite3
 
-# ── Node / Frontend ─────────────────────────────────────────────────────────
+# ── Node / Bun ───────────────────────────────────────────────────────────────
 node_modules/
+.venv/
 frontend/dist/
 frontend/.vite/
 frontend/coverage/
-*.tsbuildinfo
+*.log
 
 # ── Local runtime state ─────────────────────────────────────────────────────
 .guardian/
@@ -57,9 +37,6 @@ Thumbs.db
 
 # ── Docker ──────────────────────────────────────────────────────────────────
 docker-compose.override.yml
-
-# ── Alembic auto-generated (keep versions tracked) ─────────────────────────
-# (nothing to exclude here — versions/ is committed)
 
 # ── Hermes agent state ──────────────────────────────────────────────────────
 .hermes/

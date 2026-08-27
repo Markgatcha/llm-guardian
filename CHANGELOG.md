@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Linter switched from Biome to Oxlint (OXC)** — `bun run lint` now runs
+  `oxlint src --quiet` (config: `.oxlintrc.json`), with `bun run lint:fix` for
+  auto-fixes. Oxlint is Rust-based and runs orders of magnitude faster than the
+  previous Biome setup while covering the same rule classes (unused vars,
+  `no-explicit-any`, `prefer-const`, `eqeqeq`).
+
+### Removed
+
+- **Legacy Python/FastAPI backend** — `backend/`, `tests/backend/`,
+  `alembic.ini`, `requirements.txt`, `pyproject.toml`, `config.example.yaml`,
+  the Python CI job, the Python CodeQL analysis, and Python-era devcontainer
+  setup. The gateway has been fully Bun/TypeScript since the v1.x rewrite; the
+  Python code was untouched since the initial commit and is preserved in git
+  history. `docs/contributing.md` rewritten for the Bun workflow.
+
 ### Upgraded to Bun 1.4
 
 - **`engines.bun` raised to `>=1.4.0`**; `@types/bun` updated to `^1.4.0`. Bun 1.4
