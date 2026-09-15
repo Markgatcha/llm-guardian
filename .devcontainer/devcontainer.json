@@ -3,5 +3,5 @@
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1",
   
   // Commands to run every time the codespace is created/rebuilt
-  "postCreateCommand": "npm install -g npm@latest
+  "postCreateCommand": "npm install -g npm@latest"
   }
