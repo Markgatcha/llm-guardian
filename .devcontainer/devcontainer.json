@@ -1,7 +1,7 @@
 {
-  "name": "Node.js Workspace",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:1",
+  "name": "Bun Workspace",
+  "image": "oven/bun:1.4",
   
   // Commands to run every time the codespace is created/rebuilt
-  "postCreateCommand": "npm install -g npm@latest"
-  }
+  "postCreateCommand": "bun install --frozen-lockfile"
+}
