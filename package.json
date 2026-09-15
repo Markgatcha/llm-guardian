@@ -90,17 +90,17 @@
 		"prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
 	},
 	"dependencies": {
-		"@opentui/core": "^0.5.3",
+		"@opentui/core": "^0.5.11",
 		"commander": "^15.0.0",
 		"drizzle-orm": "^0.45.2",
-		"hono": "^4.13.2",
+		"hono": "^4.13.8",
 		"nanoid": "^6.0.1",
-		"openai": "^7.4.0",
-		"zod": "^4.4.3"
+		"openai": "^7.15.0",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.4.0",
-		"oxlint": "^1.78.0",
+		"@types/bun": "^1.4.2",
+		"oxlint": "^1.83.0",
 		"typescript": "^7.0.2"
 	}
 }
