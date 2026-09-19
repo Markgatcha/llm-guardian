@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   KeyRound,
   LayoutDashboard,
@@ -64,9 +64,14 @@ export default function Shell() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
+  // Reset the mobile sidebar on navigation via render-time adjustment
+  // (React docs: "Storing information from previous renders") instead of
+  // setState-in-effect, which react-hooks v7 flags.
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  if (location.pathname !== prevPathname) {
+    setPrevPathname(location.pathname);
     setMobileOpen(false);
-  }, [location.pathname]);
+  }
 
   const keySuffix = useMemo(() => lastFour(adminKey), [adminKey]);
 

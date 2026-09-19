@@ -44,7 +44,10 @@ export function useKeys(): UseKeysResult {
     }
   }, [handleError]);
 
+  // Intentional fetch-on-mount: the standard data-loading effect pattern.
+  // (A Suspense migration is out of scope for this change.)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refetch();
   }, [refetch]);
 
