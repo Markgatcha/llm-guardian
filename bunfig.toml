@@ -9,7 +9,8 @@ preload = ["./src/core/types.ts"]
 # Bun 1.4: test files run in parallel via the --parallel CLI flag
 # (see package.json "test" / "test:all" scripts).
 
-[run]
-# Equivalent to `bun --bun` for all `bun run` commands — aliases node
-# to bun inside lifecycle scripts.
-bun = true
+# NOTE: `[run] bun = true` (alias node -> bun in lifecycle scripts) was
+# removed: it forces node-based tooling onto Bun's runtime, which breaks
+# vitest 5 + jsdom 30 (jsdom creates its window in a vm context when
+# `runScripts` is set, and its private-field brand checks fail under Bun).
+# Keep node shebangs resolving to real node.
