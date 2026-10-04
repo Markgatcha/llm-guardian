@@ -14,23 +14,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lockfile drift: fail fast if bun.lock is out of sync with package.json.
-  verify-lockfile:
-    name: Verify lockfile
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-      - name: Verify bun.lock is in sync
-        run: bun install --frozen-lockfile
-
+  # The frozen installs in the core and frontend jobs validate their own
+  # lockfiles; a separate lockfile job would repeat dependency installation.
   ci:
     name: Typecheck, Lint, Test & Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: [verify-lockfile]
     strategy:
       fail-fast: false
       matrix:
@@ -42,6 +30,13 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
+      - name: Cache Bun packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-1.4.0-root-${{ hashFiles('bun.lock', 'package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-1.4.0-root-
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: TypeScript version
@@ -52,7 +47,32 @@ jobs:
         run: bun run lint
       - name: Test
         run: bun run test
-      - name: Frontend tests
-        run: bun run test:frontend
       - name: Build
         run: bun run build
+
+  frontend:
+    name: Frontend tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - name: Cache Bun frontend packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-1.4.0-frontend-${{ hashFiles('frontend/bun.lock', 'frontend/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-1.4.0-frontend-
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: frontend
+      - name: Frontend tests
+        run: ./node_modules/.bin/vitest run --config ./vite.config.ts --root .
+        working-directory: frontend
