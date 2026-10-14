@@ -90,7 +90,7 @@
 		"prepublishOnly": "bun run typecheck && bun run lint && bun run test && bun run build"
 	},
 	"dependencies": {
-		"@opentui/core": "^0.5.14",
+		"@opentui/core": "^0.6.0",
 		"commander": "^15.0.0",
 		"drizzle-orm": "^0.45.3",
 		"hono": "^4.13.13",
