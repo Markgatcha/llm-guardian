@@ -12,6 +12,8 @@
 
 > Part of the **AI Trio**: [MemOS](https://github.com/Markgatcha/memos) (Memory) · [Universal-MCP-Toolkit](https://github.com/Markgatcha/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
 
+> **Docs:** [context-core.dev/docs/guardian](https://context-core.dev/docs/guardian/) — quickstart, folding, proxy, TUI, and provider configuration.
+
 ## 🔗 Part of the AI Trio
 
 LLM-Guardian is one of three sibling projects that compose into a complete agent memory + tooling stack:
