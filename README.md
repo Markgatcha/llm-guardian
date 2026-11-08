@@ -1,4 +1,4 @@
-# LLM-Guardian v1.7.0
+# LLM-Guardian
 
 [![npm version](https://img.shields.io/npm/v/llm-guardian?logo=npm&color=cb3837)](https://www.npmjs.com/package/llm-guardian)
 [![CI](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/Markgatcha/llm-guardian/actions/workflows/ci.yml)
@@ -8,7 +8,7 @@
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?logo=bun)](https://bun.sh)
 [![GitHub stars](https://img.shields.io/github/stars/Markgatcha/llm-guardian?style=social)](https://github.com/Markgatcha/llm-guardian)
 
-**Central Nervous System of the AI Trio** — zero-config, sub-30ms token optimization with Semantic Folding, VCM Sharding, Hermes-style retain filtering, tool gating, and prompt caching.
+**A drop-in OpenAI/Anthropic proxy that cuts prompt tokens and enforces budgets.** Point Claude Code, Cursor, or any OpenAI-compatible client at it and see the savings. Semantic folding, VCM sharding, retain filtering, tool gating, and prompt caching are built in.
 
 > Part of the **AI Trio**: [MemOS](https://github.com/Markgatcha/memos) (Memory) · [Universal-MCP-Toolkit](https://github.com/Markgatcha/universal-mcp-toolkit) (Tools) · **LLM-Guardian** (Optimization)
 
