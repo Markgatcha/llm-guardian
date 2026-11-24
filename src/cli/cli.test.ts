@@ -114,3 +114,13 @@ describe("start", () => {
 		}
 	});
 });
+
+describe("bench", () => {
+	it("prints a machine-readable report with --json", async () => {
+		const { stdout, code } = await guardian("bench", "--json", "-n", "1");
+		expect(code).toBe(0);
+		const report = JSON.parse(stdout);
+		expect(report.scenarios.length).toBeGreaterThanOrEqual(5);
+		expect(report.summary.meanReduction).toBeGreaterThan(0.5);
+	});
+});

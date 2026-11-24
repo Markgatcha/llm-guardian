@@ -439,15 +439,34 @@ export function foldText(
 
 export function foldMessages(
 	messages: ChatMessage[],
-	options: { maxTokens?: number; preserveSystem?: boolean } = {},
+	options: {
+		maxTokens?: number;
+		preserveSystem?: boolean;
+		/**
+		 * Leave the most recent user turn verbatim. That turn is the question the
+		 * model has to answer; folding it can blank or mangle the very thing the
+		 * rest of the prompt exists to support. Pipelines should set this.
+		 */
+		preserveLastUser?: boolean;
+	} = {},
 ): {
 	messages: ChatMessage[];
 	metadata: EntityHeadline;
 	foldedTokens: number;
 	foldingTimeMs: number;
 } {
-	const { maxTokens = 4000, preserveSystem = true } = options;
+	const { maxTokens = 4000, preserveSystem = true, preserveLastUser = false } = options;
 	const start = performance.now();
+
+	let lastUserIdx = -1;
+	if (preserveLastUser) {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			if (messages[i]?.role === "user") {
+				lastUserIdx = i;
+				break;
+			}
+		}
+	}
 
 	const result: ChatMessage[] = [];
 	let totalOriginalTokens = 0;
@@ -455,8 +474,16 @@ export function foldMessages(
 	const allEntities: string[] = [];
 	const allActions: string[] = [];
 
-	for (const msg of messages) {
+	for (const [idx, msg] of messages.entries()) {
 		if (msg.role === "system" && preserveSystem) {
+			result.push(msg);
+			continue;
+		}
+
+		if (idx === lastUserIdx) {
+			const tokens = estimateTokens(msg.content);
+			totalOriginalTokens += tokens;
+			totalFoldedTokens += tokens;
 			result.push(msg);
 			continue;
 		}
@@ -500,6 +527,14 @@ export function foldMessages(
 			maxTokens: maxTokensForMsg,
 			preserveCode: true,
 		});
+
+		// A fold must never erase a turn. If it comes back blank, the original
+		// is the only faithful answer — keep it.
+		if (!foldResult.foldedPrompt.trim()) {
+			result.push(msg);
+			totalFoldedTokens += originalTokens;
+			continue;
+		}
 
 		result.push({ ...msg, content: foldResult.foldedPrompt });
 		totalFoldedTokens += foldResult.metadata.foldedTokens;

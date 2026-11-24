@@ -425,6 +425,7 @@ quality**, not just token counts:
 | `bun run bench:context-loss` | **Fact retention** — declared ground-truth facts survive the real pipeline (retain → fold → shard). 100% expected. Model-free. | No |
 | `bun run bench:quality` | **Answer fidelity** — same conversation sent raw vs. optimized to a local model; the gate is the *delta* (optimizing must not lower recall). | Yes (local model) |
 | `bun run bench:orchestrator` | Size + latency of the pipeline only (existing). | No |
+| `bun run bench:harness` (or `guardian bench`) | **Realistic-size A/B** — the real pipeline on 1.5k–6k token workloads (debug chat, logs, JSON, docs) vs. equal-token-budget baselines: token reduction, fact retention, overhead. Model-free. | No |
 
 ```bash
 # Offline: confirm no facts are dropped
@@ -435,6 +436,25 @@ bun run bench:context-loss
 MODEL=google/gemma-4-e2b BASE_URL=http://127.0.0.1:1234/v1 \
   MAX_TOKENS=400 GUARDIAN_REASONING=none bun run bench:quality
 ```
+
+`bench:harness` results on the bundled corpus (token counts are the built-in
+estimate, ~±10% of a real tokenizer):
+
+| Scenario | Tokens saved | Facts kept (Guardian) | Facts kept (equal-budget sliding window) |
+|---|---|---|---|
+| Long debugging chat | 81% | 75% | 0% |
+| Contract Q&A | 85% | 100% | 0% |
+| Padded chat | 59% | 100% | 33% |
+| Pasted service log | 79% | **0%** | 0% |
+| Large JSON tool result | 77% | **33%** | 33% |
+
+Guardian removes ~76% of tokens on realistic inputs and keeps more facts than
+truncating to the same budget, but **on large pasted logs and JSON it can drop
+the exact line you ask about** (folding is query-blind). Overhead is ~1–10 ms on
+chat-sized prompts and ~100–300 ms p95 on 5k+ token blobs, so "sub-30ms" holds
+for typical conversations, not huge pastes. The earlier `bench:context-loss`
+corpus is under 250 tokens, below the fold/shard gates, so it does not exercise
+these paths.
 
 `bench:quality` reports `worstDeltaRecall` (must stay ≥ −5pp) and
 `meanAnswerF1`. Absolute recall depends on the local model's own

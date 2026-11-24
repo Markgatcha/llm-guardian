@@ -108,7 +108,7 @@ export type ChatSessionOptions = {
  * then shard if still large. Returns the messages to send and which stages
  * fired.
  */
-function optimize(messages: ChatMessage[]): {
+export function optimize(messages: ChatMessage[]): {
 	messages: ChatMessage[];
 	folded: boolean;
 	sharded: boolean;
@@ -142,7 +142,10 @@ function optimize(messages: ChatMessage[]): {
 
 	const promptTokens = out.reduce((s, m) => s + countTokens(m.content), 0);
 	if (promptTokens > FOLD_GATE) {
-		const result = foldMessages(out, { maxTokens: FOLD_MAX_TOKENS });
+		const result = foldMessages(out, {
+			maxTokens: FOLD_MAX_TOKENS,
+			preserveLastUser: true,
+		});
 		out = result.messages;
 		folded = true;
 	}

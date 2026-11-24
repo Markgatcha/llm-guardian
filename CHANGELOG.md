@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Benchmark + fold safety
+
+- **`guardian bench` / `bun run bench:harness`** — offline benchmark of the real
+  pipeline on realistic 1.5k–6k token workloads against equal-budget baselines
+  (token reduction, fact retention, overhead). `src/bench/` holds the seeded
+  corpus and runner; it calls the actual `optimize()` the chat TUI uses instead
+  of a hand-copied pipeline.
+- **Fix: folding could blank the user's question.** `foldMessages` folded every
+  turn, including the final user message, and could return an empty string
+  (4 of 17 turns were blank in a long debugging chat). The pipelines now pass
+  `preserveLastUser`, and a fold can never replace a turn with blank text.
+- Known gap (tracked as a todo test): needles buried in large pasted logs/JSON
+  are dropped, because folding is query-blind and sharding collapses to a
+  skeleton.
+
 ### CLI design pass
 
 - **`guardian --help` / `--version` now work.** Any argument starting with `-`

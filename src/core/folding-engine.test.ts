@@ -108,3 +108,29 @@ describe("folding-engine", () => {
     expect(folded.length).toBeLessThan(big.length);
   });
 });
+
+describe("foldMessages — question safety", () => {
+  const long = (s: string) => `${s} `.repeat(60);
+
+  it("preserveLastUser leaves the final user turn byte-for-byte intact", () => {
+    const question = "Remind me: which job was failing, in what region, and with what exit code?";
+    const messages = [
+      { role: "system" as const, content: "sys" },
+      { role: "user" as const, content: long("The nightly job in eu-west-3 failed with exit code 137.") },
+      { role: "assistant" as const, content: long("Please check memory usage and the container limits.") },
+      { role: "user" as const, content: question },
+    ];
+    const out = foldMessages(messages, { preserveLastUser: true });
+    expect(out.messages.at(-1)?.content).toBe(question);
+  });
+
+  it("never replaces a turn with blank text", () => {
+    const messages = [
+      { role: "user" as const, content: long("ok thanks, that's helpful, let me try that and get back to you") },
+      { role: "assistant" as const, content: long("Sure, happy to help with that, let me think it through carefully") },
+    ];
+    for (const m of foldMessages(messages).messages) {
+      expect(m.content.trim().length).toBeGreaterThan(0);
+    }
+  });
+});

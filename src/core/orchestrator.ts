@@ -194,6 +194,7 @@ export async function orchestrate(
 		const foldResult = foldMessages(workingMessages, {
 			maxTokens: 2000,
 			preserveSystem: true,
+			preserveLastUser: true,
 		});
 		workingMessages = foldResult.messages;
 		optimization.foldingApplied = true;
@@ -476,7 +477,7 @@ export async function* orchestrateStream(
 		0,
 	);
 	if (request.enableFolding && originalTokens > 1000) {
-		const foldResult = foldMessages(workingMessages);
+		const foldResult = foldMessages(workingMessages, { preserveLastUser: true });
 		workingMessages = foldResult.messages;
 		optimization.foldingApplied = true;
 		optimization.foldingCompressionRatio = foldResult.metadata.compressionRatio;

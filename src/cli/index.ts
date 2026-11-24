@@ -533,6 +533,43 @@ program
 		ui.blank();
 	});
 
+// ─── --bench ─────────────────────────────────────────────────────────────────
+
+program
+	.command("bench")
+	.description("Benchmark token savings, fact retention and overhead (offline)")
+	.option("-n, --iterations <n>", "Timing iterations per scenario", "15")
+	.option("--json", "Print the full report as JSON")
+	.action(async (opts) => {
+		const iterations = Number(opts.iterations);
+		if (!Number.isInteger(iterations) || iterations < 1) {
+			fail(`Invalid --iterations "${opts.iterations}"`, "Use a positive whole number.");
+		}
+		// Loaded lazily so the other commands don't pay for the corpus.
+		const { runBenchmark, formatReport } = await import("../bench/harness.ts");
+		const report = runBenchmark({ iterations });
+
+		if (opts.json) {
+			console.log(JSON.stringify(report, null, 2));
+			return;
+		}
+
+		const { summary } = report;
+		ui.blank();
+		ui.header("Benchmark", "real pipeline, offline, equal-budget baselines");
+		ui.blank();
+		for (const line of formatReport(report)) console.log(`  ${theme.textMuted(line)}`);
+		ui.blank();
+		if (summary.scenariosWithLoss.length) {
+			ui.warn(`Facts lost in: ${summary.scenariosWithLoss.join(", ")}`);
+			ui.hint("Savings are real, but large pasted logs/JSON can lose the detail you ask about.");
+		} else {
+			ui.success("Every fact survived in every scenario.");
+		}
+		ui.hint("Prompt-side only. To score model answers, run `bun run bench:quality`.");
+		ui.blank();
+	});
+
 // ─── Parse ───────────────────────────────────────────────────────────────────
 
 /**
