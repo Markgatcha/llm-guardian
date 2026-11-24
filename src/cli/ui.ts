@@ -273,62 +273,87 @@ export function wordmark(word: string): void {
 }
 
 /**
- * Print a centered slab holding the given content rows. A blank pad row is
- * added above and below the content, matching the splash panel's proportions.
+ * Print a slab holding the given content rows. A blank pad row is added above
+ * and below the content, matching the splash panel's proportions.
+ *
+ * Banners (wordmark + slab) center the slab under the mark; result blocks that
+ * continue into left-aligned `stat` rows pass `align: "left"` so the slab and
+ * the rows beneath it share one left edge instead of drifting apart.
  *
  *   ▎ Serving · http://localhost:3000  OpenRouter
  */
-export function panel(contentRows: readonly (readonly Segment[])[]): void {
+export function panel(
+	contentRows: readonly (readonly Segment[])[],
+	opts: { align?: "center" | "left" } = {},
+): void {
 	const width = panelWidth();
-	const indent = " ".repeat(panelLeft());
+	const indent = " ".repeat(opts.align === "left" ? 2 : panelLeft());
 	console.log(indent + slabRow([], width));
 	for (const row of contentRows) console.log(indent + slabRow(row, width));
 	console.log(indent + slabRow([], width));
 }
 
 /**
- * Print keybinding-style hints, right-aligned flush with the slab's right
+ * Build the keybinding-hints row, right-aligned flush with the slab's right
  * edge: the key bright and bold, its action muted.
  *
  *                                       enter optimize   ctrl+p commands
  */
-export function keys(pairs: readonly (readonly [string, string])[]): void {
+export function hintsLine(
+	pairs: readonly (readonly [string, string])[],
+	cols = columns(),
+): string {
 	const plain = pairs.map(([k, a]) => `${k} ${a}`).join("   ");
 	const painted = pairs
 		.map(([k, a]) => `${theme.bold(theme.text(k))} ${theme.textMuted(a)}`)
 		.join("   ");
-	const left = Math.max(0, panelLeft() + panelWidth() - plain.length);
-	console.log(" ".repeat(left) + painted);
+	const left = Math.max(0, panelLeft(cols) + panelWidth(cols) - plain.length);
+	return " ".repeat(left) + painted;
 }
 
 /**
- * Print the centered amber tip line — the single warm highlight in the
+ * Build the centered amber tip line — the single warm highlight in the
  * palette, with the actionable command brightest.
  *
  *   ● Tip Run /start to launch the gateway
  */
-export function tip(command: string, text: string): void {
+export function tipLine(command: string, text: string, cols = columns()): string {
 	const plain = `${GLYPH.tip} Tip Run ${command} ${text}`;
 	const painted =
 		`${theme.tip(GLYPH.tip)} ${theme.tip("Tip")} ` +
 		`${theme.textMuted("Run")} ${theme.bold(theme.text(command))} ` +
 		`${theme.textMuted(text)}`;
-	console.log(
-		" ".repeat(Math.max(0, Math.floor((columns() - plain.length) / 2))) + painted,
-	);
+	return " ".repeat(Math.max(0, Math.floor((cols - plain.length) / 2))) + painted;
 }
 
 /**
- * Print the footer row: the shell-style cwd at the far left, the version at
+ * Build the footer row: the shell-style cwd at the far left, the version at
  * the far right, both muted.
  *
  *   ~/llm-guardian                                            1.6.26
  */
+export function footerLine(
+	version: string,
+	cols = columns(),
+	cwd = homeRelative(process.cwd()),
+): string {
+	const fill = Math.max(1, cols - 4 - cwd.length - version.length);
+	return `  ${theme.textMuted(cwd)}${" ".repeat(fill)}${theme.textMuted(version)}`;
+}
+
+/** Print the keybinding-hints row. */
+export function keys(pairs: readonly (readonly [string, string])[]): void {
+	console.log(hintsLine(pairs));
+}
+
+/** Print the centered amber tip line. */
+export function tip(command: string, text: string): void {
+	console.log(tipLine(command, text));
+}
+
+/** Print the footer row. */
 export function footer(version: string, cwd = homeRelative(process.cwd())): void {
-	const fill = Math.max(1, columns() - 4 - cwd.length - version.length);
-	console.log(
-		`  ${theme.textMuted(cwd)}${" ".repeat(fill)}${theme.textMuted(version)}`,
-	);
+	console.log(footerLine(version, columns(), cwd));
 }
 
 /**
@@ -420,6 +445,22 @@ export function stat(
 	paint: (t: string) => string = theme.text,
 ): void {
 	console.log(`  ${theme.textMuted(padLabel(label))}${paint(value)}`);
+}
+
+/**
+ * A fixed-width horizontal meter for a 0–1 ratio. Filled cells are green, the
+ * remainder a faint rule color; the glyphs themselves (`█` / `░`) stay legible
+ * without color, so piped output still reads as a bar.
+ *
+ *   ████████████░░░░░░░░
+ */
+export function meter(ratio: number, width = 20): string {
+	const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
+	const filled = Math.round(clamped * width);
+	return (
+		theme.success("\u2588".repeat(filled)) +
+		theme.rule("\u2591".repeat(width - filled))
+	);
 }
 
 /**

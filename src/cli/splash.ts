@@ -28,16 +28,17 @@
 // Color is delegated entirely to ./theme.ts, so the whole screen degrades to
 // clean, aligned plain text under NO_COLOR, in CI, or when piped.
 
-import { theme } from "./theme.ts";
 import {
 	type Segment,
 	columns,
-	homeRelative,
+	footerLine,
+	hintsLine,
 	panelLeft,
 	panelWidth,
 	renderWordmark,
 	rows,
 	slabRow,
+	tipLine,
 } from "./ui.ts";
 
 /** Fraction of the viewport height above the wordmark. */
@@ -145,33 +146,18 @@ export function composeSplash(opts: SplashOptions = {}): string[] {
 
 	// 3. Keybinding hints, right-aligned flush with the slab's right edge.
 	out.push("");
-	const hintPlain = hints.map(([k, a]) => `${k} ${a}`).join("   ");
-	const hintPainted = hints
-		.map(([k, a]) => `${theme.bold(theme.text(k))} ${theme.textMuted(a)}`)
-		.join("   ");
-	out.push(" ".repeat(Math.max(0, left + width - hintPlain.length)) + hintPainted);
+	out.push(hintsLine(hints, cols));
 
 	// 4. Three blank rows, then the centered amber tip.
 	out.push("", "", "");
-	const tipPlain = `\u25cf Tip Run ${tipCommand} ${tipText}`;
-	const tipPainted =
-		`${theme.tip("\u25cf")} ${theme.tip("Tip")} ` +
-		`${theme.textMuted("Run")} ${theme.bold(theme.text(tipCommand))} ` +
-		`${theme.textMuted(tipText)}`;
-	out.push(
-		" ".repeat(Math.max(0, Math.floor((cols - tipPlain.length) / 2))) + tipPainted,
-	);
+	out.push(tipLine(tipCommand, tipText, cols));
 
 	// Footer, bottom-anchored with one row of breathing room beneath it.
 	// The gap is computed BEFORE the loop: `out.length` grows on every push,
 	// so testing it inside the condition would fill only half the gap.
-	const cwd = homeRelative(process.cwd());
 	const gap = Math.max(0, height - out.length - 2);
 	for (let i = 0; i < gap; i++) out.push("");
-	const fill = Math.max(1, cols - 4 - cwd.length - version.length);
-	out.push(
-		`  ${theme.textMuted(cwd)}${" ".repeat(fill)}${theme.textMuted(version)}`,
-	);
+	out.push(footerLine(version, cols));
 
 	return out;
 }

@@ -238,6 +238,94 @@ describe("tui chat", () => {
 	});
 });
 
+describe("tui layout states", () => {
+	const LONG = ["The migration timed out. Raise the timeout to 120s. ".repeat(12)];
+
+	it("anchors the footer to the bottom row while idle", async () => {
+		const h = await harness(100, 30);
+		const lines = h.captureCharFrame().split("\n");
+		const last = lines.filter((l) => l.trim()).at(-1) ?? "";
+		expect(last).toContain("9.9.9");
+		// Nothing but blank rows may sit below it.
+		expect(lines.slice(lines.findIndex((l) => l.includes("9.9.9")) + 1).join("").trim()).toBe("");
+		expect(lines.findIndex((l) => l.includes("9.9.9"))).toBeGreaterThanOrEqual(27);
+		h.renderer.destroy();
+	});
+
+	it("keeps every hint on one line, unclipped", async () => {
+		const h = await harness(100, 30);
+		const frame = h.captureCharFrame();
+		expect(frame).toMatch(/enter send +\/models +\/clear +ctrl\+c quit/);
+		h.renderer.destroy();
+	});
+
+	it("swaps the wordmark for a one-line header once a chat starts", async () => {
+		const h = await harness(100, 30);
+		expect(h.wordmark.visible).toBe(true);
+		expect(h.header.visible).toBe(false);
+
+		h.input.value = "why is the deploy failing";
+		await h.submit();
+		await h.renderOnce();
+		expect(h.wordmark.visible).toBe(false);
+		expect(h.header.visible).toBe(true);
+		expect(h.captureCharFrame()).toContain("\u25c6 guardian");
+
+		h.input.value = "/clear";
+		await h.submit();
+		await h.renderOnce();
+		expect(h.wordmark.visible).toBe(true);
+		expect(h.header.visible).toBe(false);
+		h.renderer.destroy();
+	});
+
+	it("keeps the slab, hints and footer intact under a long reply", async () => {
+		const h = await harness(80, 24, LONG);
+		h.input.value = "tell me everything";
+		await h.submit();
+		await h.renderOnce();
+
+		const frame = h.captureCharFrame();
+		// The regression: the transcript used to crush the slab, printing the
+		// status line over the hints ("enterhsendc/c/modelsonn...").
+		expect(frame).toMatch(/enter send +\/models +\/clear +ctrl\+c quit/);
+		expect(frame).toContain("Message guardian");
+		expect(frame).toContain("9.9.9");
+		h.renderer.destroy();
+	});
+
+	it("hangs wrapped reply lines under the text, not under the role label", async () => {
+		const h = await harness(100, 40, LONG);
+		h.input.value = "tell me everything";
+		await h.submit();
+		await h.renderOnce();
+
+		const lines = h.captureCharFrame().split("\n");
+		const first = lines.find((l) => l.includes("anthropic \u203a")) ?? "";
+		const textCol = first.indexOf("The migration");
+		expect(textCol).toBeGreaterThan(0);
+		// The next row is a wrapped continuation indented to the same column.
+		const next = lines[lines.indexOf(first) + 1] ?? "";
+		expect(next.slice(0, textCol).trim()).toBe("");
+		expect(next.trim().length).toBeGreaterThan(0);
+		h.renderer.destroy();
+	});
+
+	it("stops the busy spinner after a turn so no timer outlives it", async () => {
+		const h = await harness();
+		h.input.value = "hello there";
+		await h.submit();
+		await h.renderOnce();
+		const settled = h.captureCharFrame();
+		await new Promise((r) => setTimeout(r, 250));
+		await h.renderOnce();
+		// A live spinner would have repainted the status line by now.
+		expect(h.captureCharFrame()).toBe(settled);
+		expect(settled).not.toMatch(/[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]/);
+		h.renderer.destroy();
+	});
+});
+
 describe("tui exit", () => {
 	it("quits on ctrl+c and escape, and nothing else", () => {
 		expect(isQuitKey({ name: "c", ctrl: true })).toBe(true);

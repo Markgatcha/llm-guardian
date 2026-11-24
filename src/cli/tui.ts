@@ -41,12 +41,14 @@
 import {
 	BoxRenderable,
 	type CliRenderer,
+	CliRenderEvents,
 	InputRenderable,
 	InputRenderableEvents,
 	type KeyEvent,
 	ScrollBoxRenderable,
 	StyledText,
 	TextRenderable,
+	bold,
 	createCliRenderer,
 	fg,
 } from "@opentui/core";
@@ -69,6 +71,37 @@ const PANEL_PERCENT = "47%" as const;
 
 /** Transcript width — wider than the slab so replies have room. */
 const TRANSCRIPT_PERCENT = "80%" as const;
+
+/** Width of the right-aligned role column in the transcript ("anthropic ›"). */
+const LABEL_WIDTH = 14;
+
+/** Braille spinner frames for the busy status line. */
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+
+/**
+ * Keybinding hints under the slab, as `[key, action]` pairs. Kept short enough
+ * to fit the slab's width on a typical 100-column terminal.
+ */
+const HINTS: readonly (readonly [string, string])[] = [
+	["enter", "send"],
+	["/models", ""],
+	["/clear", ""],
+	["ctrl+c", "quit"],
+];
+
+/** Never let the slab (or the hints aligned to it) get narrower than this. */
+const PANEL_MIN = 46;
+
+/** Hints as styled chunks: key bright, action muted — same as the ANSI path. */
+function hintsText(pairs: readonly (readonly [string, string])[]): StyledText {
+	const chunks = pairs.flatMap(([key, action], i) => [
+		fg(palette.text)(key),
+		fg(palette.textMuted)(
+			`${action ? ` ${action}` : ""}${i < pairs.length - 1 ? "   " : ""}`,
+		),
+	]);
+	return new StyledText(chunks);
+}
 
 export type TuiOptions = {
 	/** Version shown at the footer's right edge. */
@@ -128,6 +161,8 @@ export type TuiHandles = {
 	tip: TextRenderable;
 	slab: BoxRenderable;
 	wordmark: BoxRenderable;
+	/** One-line brand header that replaces the wordmark once a chat starts. */
+	header: BoxRenderable;
 	transcript: ScrollBoxRenderable;
 	session: ChatSession;
 	/** The model picker overlay — tests drive `/models` through this. */
@@ -184,13 +219,24 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	});
 	renderer.root.add(root);
 
+	// Idle-only spacers share the free height 36/64, the same proportions as the
+	// static splash: the composition sits above center and the footer stays
+	// anchored to the bottom row. They're hidden in chat, where the transcript
+	// takes the free space instead.
+	const topSpacer = new BoxRenderable(renderer, {
+		id: "spacer-top",
+		flexGrow: 36,
+		flexShrink: 1,
+	});
+	root.add(topSpacer);
+
 	// Wordmark: three rows of half blocks, per-cell ramp.
 	const mark = wordmarkRows("guardian");
 	const wordmark = new BoxRenderable(renderer, {
 		id: "wordmark",
 		flexDirection: "column",
 		width: mark.width,
-		marginTop: 2,
+		flexShrink: 0,
 	});
 	root.add(wordmark);
 	mark.rows.forEach((row, i) => {
@@ -199,14 +245,51 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		);
 	});
 
+	// Compact header: once a conversation starts the three-row wordmark would
+	// eat a quarter of a small terminal, so it gives way to a single line.
+	const header = new BoxRenderable(renderer, {
+		id: "header",
+		width: TRANSCRIPT_PERCENT,
+		flexDirection: "row",
+		justifyContent: "space-between",
+		marginTop: 1,
+		flexShrink: 0,
+		visible: false,
+	});
+	root.add(header);
+	header.add(
+		new TextRenderable(renderer, {
+			id: "header-title",
+			content: new StyledText([
+				fg(palette.primary)("◆ "),
+				bold(fg(palette.text)("guardian")),
+			]),
+		}),
+	);
+	const headerModel = new TextRenderable(renderer, {
+		id: "header-model",
+		content: session.model,
+		fg: palette.textMuted,
+	});
+	header.add(headerModel);
+
 	// Transcript: the scrollable conversation. Hidden until the first turn.
+	// It is the one element allowed to shrink — everything around it is pinned
+	// with `flexShrink: 0` so a long reply scrolls instead of crushing the
+	// slab, hints and footer.
 	const transcript = new ScrollBoxRenderable(renderer, {
 		id: "transcript",
 		width: TRANSCRIPT_PERCENT,
 		flexGrow: 1,
+		flexShrink: 1,
+		minHeight: 0,
 		flexDirection: "column",
-		marginTop: 2,
+		marginTop: 1,
 		visible: false,
+		// Follow the newest text as a reply streams in; scrolling up to reread
+		// releases the pin, and sending the next prompt re-pins it.
+		stickyScroll: true,
+		stickyStart: "bottom",
 	});
 	root.add(transcript);
 
@@ -216,10 +299,12 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	const slab = new BoxRenderable(renderer, {
 		id: "slab",
 		width: PANEL_PERCENT,
+		minWidth: PANEL_MIN,
 		flexDirection: "row",
 		backgroundColor: palette.surface,
 		border: false,
 		marginTop: 2,
+		flexShrink: 0,
 	});
 	root.add(slab);
 
@@ -275,16 +360,18 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	const hints = new BoxRenderable(renderer, {
 		id: "hints",
 		width: PANEL_PERCENT,
+		minWidth: PANEL_MIN,
 		flexDirection: "row",
 		justifyContent: "flex-end",
 		marginTop: 1,
+		flexShrink: 0,
 	});
 	root.add(hints);
 	hints.add(
 		new TextRenderable(renderer, {
 			id: "hints-text",
-			content: "enter send   /models   /model   /clear   ctrl+c quit",
-			fg: palette.textMuted,
+			content: hintsText(HINTS),
+			wrapMode: "none",
 		}),
 	);
 
@@ -292,9 +379,17 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		id: "tip",
 		content: `\u25cf ${session.provider}`,
 		fg: palette.amber,
-		marginTop: 2,
+		marginTop: 1,
+		flexShrink: 0,
 	});
 	root.add(tip);
+
+	const bottomSpacer = new BoxRenderable(renderer, {
+		id: "spacer-bottom",
+		flexGrow: 64,
+		flexShrink: 1,
+	});
+	root.add(bottomSpacer);
 
 	// Footer: cwd at the far left, version at the far right, full width.
 	const footer = new BoxRenderable(renderer, {
@@ -304,6 +399,7 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		justifyContent: "space-between",
 		paddingLeft: 2,
 		paddingRight: 2,
+		flexShrink: 0,
 	});
 	root.add(footer);
 	footer.add(
@@ -326,10 +422,32 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	input.focus();
 
 	const showIdleStatus = () => {
-		status.content = `${session.model} \u00b7 ${session.provider}`;
+		status.content = `${session.model} · ${session.provider}`;
 		status.fg = palette.textFaint;
 	};
 	showIdleStatus();
+
+	/** Everything that mirrors the active model: tip, header, idle status. */
+	const refreshModel = () => {
+		tip.content = `● ${session.provider}`;
+		headerModel.content = session.model;
+		showIdleStatus();
+	};
+
+	/**
+	 * Swap between the two layouts. Idle is the centered splash (wordmark, roomy
+	 * margins); chat trades the wordmark for a one-line header so the
+	 * transcript gets every row it can.
+	 */
+	const setChatLayout = (chat: boolean) => {
+		wordmark.visible = !chat;
+		topSpacer.visible = !chat;
+		bottomSpacer.visible = !chat;
+		header.visible = chat;
+		transcript.visible = chat;
+		slab.marginTop = chat ? 1 : 2;
+		tip.marginTop = chat ? 0 : 1;
+	};
 
 	// The model picker overlay. Selecting a model routes it straight into the
 	// session and refreshes the status/tip lines, exactly like `/model <id>`.
@@ -342,9 +460,8 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 			}),
 		onSelect: (modelId) => {
 			session.setModel(modelId);
-			tip.content = `\u25cf ${session.provider}`;
-			showIdleStatus();
-			status.content = `model \u00b7 ${session.model}`;
+			refreshModel();
+			status.content = `model · ${session.model}`;
 			status.fg = palette.info;
 			input.focus();
 		},
@@ -354,21 +471,74 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 	/** Monotonic id source for transcript lines — never resets, even on /clear. */
 	let lineSeq = 0;
 
-	/** Append a line to the transcript and scroll it into view. */
-	const addTranscriptLine = (
-		prefix: string,
+	// ─── Busy spinner ────────────────────────────────────────────────────────
+	// A turn can sit silent for seconds before the first token. A moving glyph
+	// on the status line says the app is alive, not hung.
+	let spinTimer: ReturnType<typeof setInterval> | undefined;
+	let spinLabel = "";
+	let spinFrame = 0;
+
+	const stopSpinner = () => {
+		if (spinTimer) clearInterval(spinTimer);
+		spinTimer = undefined;
+	};
+	const paintSpinner = () => {
+		// A quit mid-stream destroys the renderer; a late tick must not touch it.
+		if (renderer.isDestroyed) return stopSpinner();
+		status.content = `${SPINNER[spinFrame++ % SPINNER.length]} ${session.model} · ${spinLabel}`;
+	};
+	const startSpinner = (label: string) => {
+		stopSpinner();
+		spinLabel = label;
+		spinFrame = 0;
+		status.fg = palette.textMuted;
+		paintSpinner();
+		spinTimer = setInterval(paintSpinner, 90);
+	};
+	renderer.on(CliRenderEvents.DESTROY, stopSpinner);
+
+	// ─── Transcript ──────────────────────────────────────────────────────────
+
+	/**
+	 * Append one message: a right-aligned role label ("you ›", "anthropic ›")
+	 * beside a wrapping body. Separate columns give replies a hanging indent —
+	 * wrapped lines stay under the text instead of sliding back under the label.
+	 */
+	const addMessage = (
+		label: string,
+		labelColor: string,
 		text: string,
-		color: string,
-	): TextRenderable => {
-		transcript.visible = true;
-		const line = new TextRenderable(renderer, {
-			id: `tl-${lineSeq++}`,
-			content: text ? `${prefix} ${text}` : prefix,
-			fg: color,
+		textColor: string,
+	): { row: BoxRenderable; label: TextRenderable; body: TextRenderable } => {
+		setChatLayout(true);
+		const id = lineSeq++;
+		const row = new BoxRenderable(renderer, {
+			id: `tl-${id}`,
+			width: "100%",
+			flexDirection: "row",
+			flexShrink: 0,
+			marginBottom: 1,
 		});
-		transcript.add(line);
+		const roleLabel = new TextRenderable(renderer, {
+			id: `tl-${id}-label`,
+			content: `${label.slice(0, LABEL_WIDTH - 2)} ›`.padStart(LABEL_WIDTH),
+			fg: labelColor,
+			width: LABEL_WIDTH,
+			flexShrink: 0,
+			marginRight: 1,
+		});
+		const body = new TextRenderable(renderer, {
+			id: `tl-${id}-body`,
+			content: text,
+			fg: textColor,
+			flexGrow: 1,
+			flexShrink: 1,
+		});
+		row.add(roleLabel);
+		row.add(body);
+		transcript.add(row);
 		scrollTranscriptToBottom();
-		return line;
+		return { row, label: roleLabel, body };
 	};
 
 	/** Pin the transcript to its latest line. */
@@ -391,14 +561,13 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 
 		if (cmd.name === "/model") {
 			if (!cmd.arg) {
-				status.content = `current model \u00b7 ${session.model}`;
+				status.content = `current model · ${session.model}`;
 				status.fg = palette.info;
 				return true;
 			}
 			session.setModel(cmd.arg);
-			tip.content = `\u25cf ${session.provider}`;
-			showIdleStatus();
-			status.content = `model \u00b7 ${session.model}`;
+			refreshModel();
+			status.content = `model · ${session.model}`;
 			status.fg = palette.info;
 			return true;
 		}
@@ -410,14 +579,14 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 			for (const child of [...transcript.getChildren()]) {
 				transcript.remove(child);
 			}
-			transcript.visible = false;
+			setChatLayout(false);
 			showIdleStatus();
 			status.content = "conversation cleared";
 			status.fg = palette.info;
 			return true;
 		}
 
-		status.content = `unknown command ${cmd.name} \u2014 /models, /model, /clear`;
+		status.content = `unknown command ${cmd.name} — /models, /model, /clear`;
 		status.fg = palette.warning;
 		return true;
 	};
@@ -434,38 +603,40 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 
 		busy = true;
 		input.value = "";
-		addTranscriptLine("you \u203a", text, palette.text);
-		status.content = `${session.model} \u00b7 sending\u2026`;
-		status.fg = palette.textMuted;
+		headerModel.content = session.model;
+		addMessage("you", palette.primary, text, palette.text);
 
-		// The assistant's reply line is created up front and appended to as
-		// chunks stream in, so the user sees tokens arrive.
-		const replyLine = addTranscriptLine(
-			`${session.provider} \u203a`,
-			"",
-			palette.text,
-		);
+		// The assistant's reply row is created up front and filled in as chunks
+		// stream, so the user sees tokens arrive.
+		const reply = addMessage(session.provider, palette.secondary, "", palette.text);
+		startSpinner("sending…");
 
 		try {
 			const stream = session.send(text);
 			let step = await stream.next();
 			let accumulated = "";
 			while (!step.done) {
+				if (!accumulated) spinLabel = "streaming…";
 				accumulated += step.value;
-				replyLine.content = `${session.provider} \u203a ${accumulated}`;
+				reply.body.content = accumulated;
 				scrollTranscriptToBottom();
 				step = await stream.next();
 			}
 			const metrics: TurnMetrics = step.value;
+			stopSpinner();
 			status.content = summarizeTurn(metrics);
 			status.fg = palette.success;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			replyLine.content = `${session.provider} \u203a error: ${msg}`;
-			replyLine.fg = palette.error;
+			stopSpinner();
+			reply.label.fg = palette.error;
+			reply.body.content = `error: ${msg}`;
+			reply.body.fg = palette.error;
 			status.content = msg.slice(0, 60);
 			status.fg = palette.error;
 		} finally {
+			stopSpinner();
+			scrollTranscriptToBottom();
 			busy = false;
 		}
 	};
@@ -474,7 +645,18 @@ export function mountTui(renderer: CliRenderer, opts: TuiOptions): TuiHandles {
 		void submit();
 	});
 
-	return { input, status, tip, slab, wordmark, transcript, session, picker, submit };
+	return {
+		input,
+		status,
+		tip,
+		slab,
+		wordmark,
+		header,
+		transcript,
+		session,
+		picker,
+		submit,
+	};
 }
 
 /**

@@ -24,6 +24,66 @@ const VERSION = pkg.version;
 
 // ─── CLI Definition ──────────────────────────────────────────────────────────
 
+/** Print a one-line failure with an optional next step, then exit non-zero. */
+function fail(message: string, hint?: string): never {
+	ui.blank();
+	ui.error(message);
+	if (hint) ui.hint(hint);
+	ui.blank();
+	process.exit(1);
+}
+
+/** A TCP port, or a clear failure instead of `NaN` reaching `Bun.serve`. */
+function parsePort(raw: string): number {
+	const port = Number(raw);
+	if (!Number.isInteger(port) || port < 1 || port > 65535) {
+		fail(`Invalid port "${raw}"`, "Use a whole number between 1 and 65535.");
+	}
+	return port;
+}
+
+/** A non-negative USD amount, or a clear failure. */
+function parseUsd(flag: string, raw: string): number {
+	const amount = Number(raw);
+	if (!Number.isFinite(amount) || amount < 0) {
+		fail(`Invalid ${flag} "${raw}"`, "Use a dollar amount such as 25 or 12.50.");
+	}
+	return amount;
+}
+
+/** `$50` / `$12.50` — whole dollars stay clean, cents only when present. */
+function usd(n: number): string {
+	return `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+}
+
+/**
+ * Bind a server, turning the failures people actually hit (port in use, no
+ * permission) into a readable message instead of a stack trace.
+ *
+ * Callers print their banner AFTER this returns, so the banner never claims a
+ * server is running that failed to start.
+ */
+function listen(
+	port: number,
+	fetch: (req: Request) => Response | Promise<Response>,
+): void {
+	try {
+		Bun.serve({ port, fetch });
+	} catch (err) {
+		const code = (err as { code?: string }).code;
+		if (code === "EADDRINUSE" || /in use/i.test(String(err))) {
+			fail(
+				`Port ${port} is already in use`,
+				"Pick another with --port, or stop the process that owns it.",
+			);
+		}
+		fail(
+			`Could not listen on port ${port}`,
+			err instanceof Error ? err.message : String(err),
+		);
+	}
+}
+
 const program = new Command();
 
 program
@@ -31,7 +91,50 @@ program
 	.description(
 		"LLM-Guardian — Zero-config token optimization with Semantic Folding",
 	)
-	.version(VERSION);
+	.version(VERSION, "-V, --version", "Print the version")
+	.helpOption("-h, --help", "Show help")
+	.showHelpAfterError(theme.textMuted("(run with --help for usage)"))
+	.configureHelp({
+		// Same tokens as the rest of the CLI: primary headings, bright terms,
+		// muted descriptions. Plain text when color is off (piped, NO_COLOR).
+		styleTitle: (t) => theme.bold(theme.primary(t)),
+		styleUsage: (t) => theme.text(t),
+		styleCommandText: (t) => theme.bold(theme.text(t)),
+		styleSubcommandTerm: (t) => theme.bold(theme.text(t)),
+		styleOptionTerm: (t) => theme.bold(theme.text(t)),
+		styleArgumentTerm: (t) => theme.text(t),
+		styleDescriptionText: (t) => theme.textMuted(t),
+		styleCommandDescription: (t) => theme.textMuted(t),
+		styleSubcommandDescription: (t) => theme.textMuted(t),
+		styleOptionDescription: (t) => theme.textMuted(t),
+		styleArgumentDescription: (t) => theme.textMuted(t),
+	})
+	.addHelpText("after", () => {
+		// Bare `guardian` takes its flags outside commander, so commander's own
+		// option list can't describe them. Document them here, aligned to a
+		// computed column so a new row never throws the block out of line.
+		const chat: readonly (readonly [string, string])[] = [
+			["guardian", "Open the interactive chat (needs a terminal)"],
+			["-m, --model <id>", "Starting model (or set GUARDIAN_MODEL)"],
+			["-k, --api-key <key>", "API key for a custom endpoint"],
+			["--base-url <url>", "Any OpenAI-compatible endpoint"],
+			["--lm-studio", "Shorthand for --base-url http://127.0.0.1:1234/v1"],
+		];
+		const col = Math.max(...chat.map(([term]) => term.length)) + 3;
+		return [
+			"",
+			theme.bold(theme.primary("Chat")),
+			...chat.map(
+				([term, desc], i) =>
+					`  ${i === 0 ? theme.bold(theme.text(term)) : theme.text(term)}${" ".repeat(col - term.length)}${theme.textMuted(desc)}`,
+			),
+			"",
+			theme.bold(theme.primary("Examples")),
+			`  ${theme.textMuted("$")} ${theme.text("guardian start --lm-studio")}`,
+			`  ${theme.textMuted("$")} ${theme.text('guardian optimize "Please could you kindly summarise..."')}`,
+			"",
+		].join("\n");
+	});
 
 // ─── --start ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +162,9 @@ program
 		"Disable chain-of-thought on reasoning models (faster, deterministic). Sets GUARDIAN_REASONING=none; the local model answers directly.",
 	)
 	.action(async (opts) => {
-		const port = parseInt(opts.port, 10);
+		const port = parsePort(opts.port);
+		const dailyBudget = parseUsd("--daily-budget", opts.dailyBudget);
+		const monthlyBudget = parseUsd("--monthly-budget", opts.monthlyBudget);
 
 		// Configure subsystems
 		const useLocal = !!(opts.lmStudio || opts.local || opts.baseUrl);
@@ -87,8 +192,8 @@ program
 			});
 		}
 		configureBudget({
-			dailyBudgetUsd: parseFloat(opts.dailyBudget),
-			monthlyBudgetUsd: parseFloat(opts.monthlyBudget),
+			dailyBudgetUsd: dailyBudget,
+			monthlyBudgetUsd: monthlyBudget,
 		});
 
 		const app = new Hono();
@@ -263,6 +368,10 @@ program
 			return c.json(result);
 		});
 
+		// Bind first, then print: the banner must never announce a server that
+		// failed to start.
+		listen(port, app.fetch);
+
 		// Startup banner — the same visual grammar as the splash, compacted to
 		// a single slab so it doesn't clear the scrollback the server logs into.
 		ui.blank();
@@ -273,11 +382,19 @@ program
 				["Serving", "bold"],
 				[" · ", "faint"],
 				[`http://localhost:${port}`, "text"],
-				["  ", "faint"],
-				[useLocal ? "local runtime" : "OpenRouter", "faint"],
+			],
+			[
+				[useLocal ? "local runtime" : "OpenRouter", "muted"],
+				[" · ", "faint"],
+				[`${usd(dailyBudget)}/day  ${usd(monthlyBudget)}/month`, "faint"],
 			],
 		]);
 		ui.blank();
+		if (!useLocal && !resolvedApiKey) {
+			ui.warn("No API key found — upstream requests will fail.");
+			ui.hint("Set OPENROUTER_API_KEY, pass --api-key, or use --lm-studio.");
+			ui.blank();
+		}
 		ui.keys([
 			["GET /health", "liveness"],
 			["POST /v1/chat/completions", "proxy"],
@@ -287,11 +404,6 @@ program
 		ui.blank();
 		ui.footer(VERSION);
 		ui.blank();
-
-		Bun.serve({
-			port,
-			fetch: app.fetch,
-		});
 	});
 
 // ─── --dash ──────────────────────────────────────────────────────────────────
@@ -301,35 +413,34 @@ program
 	.description("Open the analytics dashboard")
 	.option("-p, --port <port>", "Dashboard port", "5173")
 	.action(async (opts) => {
-		const port = parseInt(opts.port, 10);
+		const port = parsePort(opts.port);
 
 		// Serve the built dashboard
 		const dashboardDir = `${import.meta.dir}/../dashboard`;
-		Bun.serve({
-			port,
-			async fetch(req) {
-				const url = new URL(req.url);
-				const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
+		const built = await Bun.file(`${dashboardDir}/index.html`).exists();
 
-				// Try to serve the file
-				const file = Bun.file(`${dashboardDir}${filePath}`);
-				if (await file.exists()) {
-					return new Response(file);
-				}
+		listen(port, async (req) => {
+			const url = new URL(req.url);
+			const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
 
-				// SPA fallback
-				const indexFile = Bun.file(`${dashboardDir}/index.html`);
-				if (await indexFile.exists()) {
-					return new Response(indexFile);
-				}
+			// Try to serve the file
+			const file = Bun.file(`${dashboardDir}${filePath}`);
+			if (await file.exists()) {
+				return new Response(file);
+			}
 
-				return new Response(
-					"Dashboard not built. Run `bun run build:dashboard` first.",
-					{
-						status: 404,
-					},
-				);
-			},
+			// SPA fallback
+			const indexFile = Bun.file(`${dashboardDir}/index.html`);
+			if (await indexFile.exists()) {
+				return new Response(indexFile);
+			}
+
+			return new Response(
+				"Dashboard not built. Run `bun run build:dashboard` first.",
+				{
+					status: 404,
+				},
+			);
 		});
 
 		ui.blank();
@@ -343,6 +454,12 @@ program
 			],
 		]);
 		ui.blank();
+		if (!built) {
+			// Say so up front rather than letting the first page load 404.
+			ui.warn("The dashboard hasn't been built yet.");
+			ui.hint("Run `bun run build:dashboard`, then reload.");
+			ui.blank();
+		}
 		ui.tip("guardian start", "to feed it live traffic");
 		ui.blank();
 		ui.footer(VERSION);
@@ -356,28 +473,44 @@ program
 	.description("Run Semantic Folding on text and show compression stats")
 	.option("-t, --max-tokens <n>", "Max output tokens", "500")
 	.action((text: string, opts) => {
-		const maxTokens = parseInt(opts.maxTokens, 10);
+		const maxTokens = Number(opts.maxTokens);
+		if (!Number.isInteger(maxTokens) || maxTokens < 1) {
+			fail(
+				`Invalid --max-tokens "${opts.maxTokens}"`,
+				"Use a positive whole number, e.g. 500.",
+			);
+		}
 		const result = foldText(text, { maxTokens });
 		const m = result.metadata;
 
 		// Headline result goes in the slab — same grammar as the splash's
 		// status line — with the detail table below it in the inline grammar.
+		// The slab is left-aligned so it shares an edge with the rows under it.
 		//
 		// Note on the percentage: `compressionRatio` is folded/original (the
 		// fraction RETAINED), so the reduction the user cares about is its
 		// complement. Reporting the raw ratio as "smaller" would invert it.
-		const reductionPct = (1 - m.compressionRatio) * 100;
+		const reduction = Math.max(0, 1 - m.compressionRatio);
+		const savedTokens = Math.max(0, m.originalTokens - m.foldedTokens);
+		const reduced = savedTokens > 0;
+		const pct = `${(reduction * 100).toFixed(1)}%`;
+
 		ui.blank();
-		ui.panel([
+		ui.panel(
 			[
-				["Folded", "bold"],
-				[" \u00b7 ", "faint"],
-				[`${m.originalTokens} \u2192 ${m.foldedTokens} tokens`, "text"],
-				["  ", "faint"],
-				[`${reductionPct.toFixed(1)}% smaller`, "faint"],
+				[
+					["Folded", "bold"],
+					[" · ", "faint"],
+					[`${m.originalTokens} → ${m.foldedTokens} tokens`, "text"],
+					["  ", "faint"],
+					[reduced ? `${pct} smaller` : "no reduction", "faint"],
+				],
 			],
-		]);
+			{ align: "left" },
+		);
 		ui.blank();
+		ui.stat("reduction", `${ui.meter(reduction)} ${pct}`);
+		ui.stat("tokens saved", String(savedTokens), reduced ? theme.success : theme.text);
 		ui.stat(
 			"semantic density",
 			`${(m.semanticDensity * 100).toFixed(1)}%`,
@@ -387,6 +520,12 @@ program
 		ui.stat("entities", m.entities.join(", ") || "none");
 		ui.stat("actions", m.actions.join(", ") || "none");
 		ui.stat("headline", m.headline || "none");
+		if (!reduced) {
+			// The most common first run is a one-liner. Explain the 0% instead of
+			// leaving the user to wonder whether folding is broken.
+			ui.blank();
+			ui.hint("Already compact — folding pays off on long, repetitive prompts.");
+		}
 		ui.blank();
 		ui.rule();
 		ui.blank();
@@ -442,7 +581,11 @@ function parseTuiFlags(argv: string[]): {
 // Claude Sonnet via the Anthropic route (which the gateway proxies through
 // OpenRouter). `/models` opens the picker; `/model <id>` switches directly.
 const firstArg = process.argv[2];
-const isSubcommand = !!firstArg && !firstArg.startsWith("-");
+// `--help` / `--version` start with a dash too, but they belong to commander —
+// otherwise `guardian --help` opens the chat (or prints the splash when piped).
+const COMMANDER_FLAGS = new Set(["-h", "--help", "-V", "--version"]);
+const isSubcommand =
+	!!firstArg && (!firstArg.startsWith("-") || COMMANDER_FLAGS.has(firstArg));
 
 if (!isSubcommand) {
 	const flags = parseTuiFlags(process.argv);
@@ -469,6 +612,13 @@ if (!isSubcommand) {
 		renderSplash({
 			version: VERSION,
 			provider: providerLabel,
+			// Piped output can't take keystrokes, so advertise real commands
+			// rather than the interactive screen's keybindings.
+			hints: [
+				["guardian start", "gateway"],
+				["guardian dash", "dashboard"],
+				["guardian --help", "all commands"],
+			],
 			tipCommand: process.env.OPENROUTER_API_KEY
 				? "guardian start"
 				: "guardian start --lm-studio",

@@ -11,6 +11,9 @@
 import { describe, expect, it } from "bun:test";
 import { composeSplash } from "./splash.ts";
 import {
+	footerLine,
+	hintsLine,
+	meter,
 	panelLeft,
 	panelWidth,
 	rasterizeWordmark,
@@ -184,5 +187,33 @@ describe("splash composition", () => {
 		expect(status).toContain("Anthropic");
 		expect(custom.some((l) => l.includes("guardian dash"))).toBe(true);
 		expect(custom.some((l) => l.includes("to open analytics"))).toBe(true);
+	});
+});
+
+describe("shared line builders", () => {
+	it("right-aligns hints flush with the slab edge", () => {
+		const line = hintsLine([["enter", "send"]], 160);
+		expect(line.length).toBe(panelLeft(160) + panelWidth(160));
+	});
+
+	it("pins the version to the far right of the footer", () => {
+		const line = footerLine("9.9.9", 100, "~/proj");
+		expect(line.startsWith("  ~/proj")).toBe(true);
+		expect(line.endsWith("9.9.9")).toBe(true);
+		expect(line.length).toBe(100 - 2);
+	});
+});
+
+describe("meter", () => {
+	it("fills proportionally and always spans its full width", () => {
+		expect(meter(0.5, 10)).toBe("\u2588".repeat(5) + "\u2591".repeat(5));
+		expect(meter(0, 10)).toBe("\u2591".repeat(10));
+		expect(meter(1, 10)).toBe("\u2588".repeat(10));
+	});
+
+	it("clamps out-of-range and non-finite ratios", () => {
+		expect(meter(-3, 4)).toBe("\u2591".repeat(4));
+		expect(meter(9, 4)).toBe("\u2588".repeat(4));
+		expect(meter(Number.NaN, 4)).toBe("\u2591".repeat(4));
 	});
 });

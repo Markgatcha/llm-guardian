@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### CLI design pass
+
+- **`guardian --help` / `--version` now work.** Any argument starting with `-`
+  used to open the chat (or print the splash when piped), so help and version
+  were unreachable. They now route to commander; help is themed with the CLI
+  palette and documents the bare-`guardian` chat flags.
+- **Chat TUI layout fixed.** After the first reply the transcript crushed the
+  slab and the status line printed over the key hints. Fixed elements are now
+  pinned, the transcript scrolls and follows new text, and the wordmark gives way
+  to a one-line header while chatting (`/clear` restores it).
+- **Chat TUI polish.** Right-aligned role labels with a hanging indent for wrapped
+  replies, a spinner while a turn is in flight, hints that no longer clip, and a
+  footer anchored to the bottom row on the idle screen.
+- **`guardian optimize`** left-aligns its result slab with the stats beneath it,
+  adds a reduction meter and tokens-saved row, and explains a 0% result.
+- **`guardian start` / `dash`** bind the port before printing the banner. A port
+  conflict is now a one-line error with a non-zero exit instead of a banner
+  followed by a stack trace. `--port`, budgets and `--max-tokens` are validated,
+  and a missing API key is called out in the banner.
+- `src/cli` tests now run under `bun run test` (they were excluded, which is how
+  the layout regression went unnoticed).
+
 ### Changed
 
 - **Linter switched from Biome to Oxlint (OXC)** — `bun run lint` now runs
