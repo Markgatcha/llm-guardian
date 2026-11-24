@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Folding & sharding engine rework
+
+- **Shared text index** (`src/core/text-index.ts`): one tokenizer, BM25,
+  properly normalized cosine and an inverted-index duplicate finder, replacing
+  four private copies that had drifted apart.
+- **Fold**: duplicates must agree on every number/id, so near-identical
+  sentences that differ in a value are no longer merged (0% -> 100% on that
+  case). Sentences are scored by information, salience and the question
+  (`foldMessages` uses the preserved final user turn as the query; `foldText`
+  takes `query`). Removed contraction rewrites ("do not" -> "don't" is 2 -> 3
+  tokens, a loss), fixed filler removal corrupting `just-in-time`, and made
+  action detection whole-word ("address" no longer reports "add").
+- **Shard**: selects pieces of large messages (log lines, JSON records,
+  paragraphs) instead of whole messages, so a message bigger than the budget is
+  no longer dropped entirely. Question and the turn before it are always kept,
+  questions pull in their answers, duplicates never merge differing values,
+  and `maxTokens` is a ceiling: spare budget is no longer filled with
+  irrelevant recent turns. The previous "adaptive cutoff" was dead code.
+- **Speed**: sharding 1.6-2.1x faster on 100-1000 turn chats; folding ~1.35x
+  slower in exchange for accuracy. Both are linear (guarded by tests).
+- **Security/robustness**: the old fold was quadratic on long unbroken input
+  (a 200k-character token took ~115 s) via an unbounded path regex. Fixed, the
+  new analysis is linear, and the question text analysed is capped. Regression
+  tests cover hostile inputs.
+- `bun run bench:engines`; scenarios were each measured failures of the old
+  engines.
+
 ### Query-aware extraction + live benchmark
 
 - **New stage: query-aware extraction for large pastes** (`src/core/query-extractor.ts`).

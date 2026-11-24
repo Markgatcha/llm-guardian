@@ -2,6 +2,13 @@
 // Uses local analysis to identify high-relevance context shards
 // Reduces context bloat by 60-90% while preserving semantic coherence
 
+import {
+	type Unit,
+	assembleUnits,
+	splitUnits,
+	unitPriors,
+} from "./query-extractor.ts";
+import { Bm25, DupIndex, identifiers, makeDoc, termsOf } from "./text-index.ts";
 import { estimateTokens } from "./token-counter.ts";
 import type {
 	ChatMessage,
@@ -11,35 +18,6 @@ import type {
 	KnowledgeShard,
 	ShardingResult,
 } from "./types.ts";
-
-// ─── Helpers: similarity (semantic shard dedup) ─────────────────────────────
-
-/**
- * Term-frequency cosine similarity over lowercased word tokens. Cheap and
- * zero-dependency. Used to deduplicate near-identical context shards so the
- * model isn't fed the same information twice — the "semantic folding" intent
- * applied to the shard layer. Returns a value in [0, 1].
- */
-function contentSimilarity(a: string, b: string): number {
-	const tokenize = (s: string) =>
-		s
-			.toLowerCase()
-			.split(/[^a-z0-9]+/i)
-			.filter((w) => w.length > 2);
-	const ta = tokenize(a);
-	const tb = tokenize(b);
-	if (ta.length === 0 || tb.length === 0) return 0;
-
-	const freq = new Map<string, number>();
-	for (const w of ta) freq.set(w, (freq.get(w) ?? 0) + 1);
-	let dot = 0;
-	for (const w of tb) {
-		const c = freq.get(w);
-		if (c) dot += c;
-	}
-	const denom = Math.sqrt(ta.length) * Math.sqrt(tb.length);
-	return denom > 0 ? dot / denom : 0;
-}
 
 // ─── Skeleton Builder ────────────────────────────────────────────────────────
 
@@ -220,155 +198,42 @@ function determineRelationship(prevRole: string, currRole: string): string {
 	return "continues";
 }
 
-// ─── Shard Scoring ───────────────────────────────────────────────────────────
+// ─── Candidates ──────────────────────────────────────────────────────────────
 
-interface ScoredMessage {
-	index: number;
-	message: ChatMessage;
-	relevanceScore: number;
-	recencyScore: number;
-	entityDensity: number;
-	combinedScore: number;
-}
+/**
+ * Messages longer than this are split into units (log lines, JSON records,
+ * paragraphs) and selected piece by piece. The old sharder could only take a
+ * message whole or leave it out, so one big paste bigger than the budget was
+ * dropped entirely and the conversation collapsed to its skeleton.
+ */
+const CHUNK_TOKENS = 220;
 
-function scoreMessages(
-	messages: ChatMessage[],
-	query: string,
-	skeleton: ContextSkeleton,
-	entitiesByIndex: Map<number, ExtractedEntity[]>,
-): ScoredMessage[] {
-	const totalMessages = messages.length;
-	const queryEntities = extractEntitiesFromMessage(query);
-	const queryTerms = new Set(
-		query
-			.toLowerCase()
-			.split(/\s+/)
-			.filter((w) => w.length > 3),
-	);
+/** Candidates scoring below this are not worth a slot even with budget to spare. */
+const SCORE_FLOOR = 0.1;
 
-	return messages.map((message, index) => {
-		// Recency score — more recent messages are more relevant
-		const recencyScore = index / Math.max(totalMessages - 1, 1);
+/**
+ * `maxTokens` is a ceiling, not a target. Beyond what is forced, a candidate
+ * earns a slot only by being relevant to the question, severe/unusual, or part
+ * of the last few turns (conversational continuity). Without this gate, spare
+ * budget fills with whatever scores highest on recency alone, and the result
+ * costs more tokens for no extra facts.
+ */
+const MIN_RELEVANCE = 0.15;
+/** ...and must also be competitive with the best match (a fraction of it). */
+const REL_RATIO = 0.35;
+const MIN_PRIOR = 1.5;
+const RECENT_TURNS = 4;
 
-		// Entity overlap with query — reuse entities extracted once in
-		// buildSkeleton() instead of re-running the regexes per message.
-		const msgEntities = entitiesByIndex.get(index) ?? [];
-		const entityOverlap = msgEntities.filter((e) =>
-			queryEntities.some(
-				(qe) => qe.name.toLowerCase() === e.name.toLowerCase(),
-			),
-		).length;
-		const entityDensity = Math.min(
-			1,
-			entityOverlap / Math.max(queryEntities.length, 1),
-		);
-
-		// Term overlap with query
-		const msgTerms = message.content.toLowerCase().split(/\s+/);
-		const termOverlap = msgTerms.filter((t) => queryTerms.has(t)).length;
-		const termScore = Math.min(1, termOverlap / Math.max(queryTerms.size, 1));
-
-		// Skeleton entity relevance
-		const skeletonBoost = msgEntities.reduce((boost, entity) => {
-			const skeletonEntity = skeleton.entities.find(
-				(se) => se.name.toLowerCase() === entity.name.toLowerCase(),
-			);
-			return boost + (skeletonEntity ? skeletonEntity.relevanceScore * 0.2 : 0);
-		}, 0);
-
-		// Role-based scoring
-		const roleBoost = message.role === "system" ? 0.3 : 0;
-
-		const relevanceScore = Math.min(
-			1,
-			termScore * 0.4 + entityDensity * 0.3 + skeletonBoost + roleBoost,
-		);
-		const combinedScore =
-			relevanceScore * 0.6 +
-			recencyScore * 0.3 +
-			(message.role === "system" ? 0.1 : 0);
-
-		return {
-			index,
-			message,
-			relevanceScore,
-			recencyScore,
-			entityDensity,
-			combinedScore,
-		};
-	});
-}
-
-// ─── Shard Assembly ──────────────────────────────────────────────────────────
-
-function assembleShards(
-	scored: ScoredMessage[],
-	tokenBudget: number,
-): { shards: KnowledgeShard[]; shardsDeduped: number } {
-	// Sort by combined score descending
-	const sorted = [...scored].sort((a, b) => b.combinedScore - a.combinedScore);
-
-	const shards: KnowledgeShard[] = [];
-	let remainingBudget = tokenBudget;
-	let shardsDeduped = 0;
-
-	// Adaptive relevance cutoff. The base is 0.15 (the original fixed floor).
-	// When most of the budget is still free, we relax the bar so more marginal
-	// but distinct context is retained. When the budget is tight, we raise the
-	// bar so only the most relevant shards make the cut. This adapts sharding
-	// to both small (over-budget) and large (headroom-rich) contexts.
-	const budgetUsage = tokenBudget > 0 ? 1 - remainingBudget / tokenBudget : 1;
-	const adaptiveCutoff = budgetUsage < 0.5 ? 0.1 : budgetUsage > 0.8 ? 0.25 : 0.15;
-
-	// Always include system messages first
-	const systemMessages = sorted.filter((s) => s.message.role === "system");
-	for (const sys of systemMessages) {
-		const tokens = estimateTokens(sys.message.content);
-		if (tokens <= remainingBudget) {
-			shards.push({
-				id: `shard-${sys.index}`,
-				content: sys.message.content,
-				relevanceScore: sys.relevanceScore,
-				sourceIndices: [sys.index],
-				tokens,
-			});
-			remainingBudget -= tokens;
-		}
-	}
-
-	// Include highest-scoring non-system messages.
-	// Semantic dedup: skip a candidate if it is >= 0.85 similar to a shard we
-	// already kept — collapses redundant context before it reaches the model.
-	const nonSystem = sorted.filter((s) => s.message.role !== "system");
-	for (const msg of nonSystem) {
-		const tokens = estimateTokens(msg.message.content);
-
-		// Semantic dedup check against already-kept shards.
-		const isDup = shards.some(
-			(s) => contentSimilarity(s.content, msg.message.content) >= 0.85,
-		);
-		if (isDup) {
-			shardsDeduped++;
-			continue;
-		}
-
-		if (tokens <= remainingBudget && msg.combinedScore > adaptiveCutoff) {
-			shards.push({
-				id: `shard-${msg.index}`,
-				content: msg.message.content,
-				relevanceScore: msg.relevanceScore,
-				sourceIndices: [msg.index],
-				tokens,
-			});
-			remainingBudget -= tokens;
-		}
-		if (remainingBudget <= 0) break;
-	}
-
-	// Sort shards by original index to maintain conversation flow
-	shards.sort((a, b) => a.sourceIndices[0] - b.sourceIndices[0]);
-
-	return { shards, shardsDeduped };
+interface Candidate {
+	msg: number;
+	/** Index within the message's units, or -1 when the message is one piece. */
+	unit: number;
+	text: string;
+	tokens: number;
+	/** Query relevance, ~0–1.8. */
+	rel: number;
+	score: number;
+	forced: boolean;
 }
 
 // ─── Main Sharding Function ──────────────────────────────────────────────────
@@ -379,30 +244,206 @@ export function shardContext(
 	options: { maxTokens?: number; minRelevance?: number } = {},
 ): ShardingResult {
 	const { maxTokens = 4000 } = options;
+	const n = messages.length;
 
-	// Build context skeleton (also extracts per-message entities once)
-	const { skeleton, entitiesByIndex } = buildSkeleton(messages);
+	const msgTokens = messages.map((m) => estimateTokens(m.content));
+	const totalTokens = msgTokens.reduce((a, b) => a + b, 0);
 
-	// Score all messages (reuses the entities extracted above — no re-extraction)
-	const scored = scoreMessages(messages, query, skeleton, entitiesByIndex);
+	let lastUser = -1;
+	for (let i = n - 1; i >= 0; i--) {
+		if (messages[i]?.role === "user") {
+			lastUser = i;
+			break;
+		}
+	}
+	if (lastUser === -1) lastUser = n - 1;
 
-	// Assemble shards within token budget (with semantic dedup + adaptive cutoff)
-	const { shards, shardsDeduped } = assembleShards(scored, maxTokens);
+	// 1. Candidates: whole small messages, units of big ones.
+	const unitsByMsg = new Map<number, Unit[]>();
+	const cands: Candidate[] = [];
+	const priors: number[] = [];
+	for (let i = 0; i < n; i++) {
+		const m = messages[i] as ChatMessage;
+		if (m.role !== "system" && (msgTokens[i] as number) > CHUNK_TOKENS) {
+			const units = splitUnits(m.content);
+			if (units.length >= 4) {
+				unitsByMsg.set(i, units);
+				const p = unitPriors(units);
+				units.forEach((u, j) => {
+					cands.push({ msg: i, unit: j, text: u.text, tokens: estimateTokens(u.text) + 1, rel: 0, score: 0, forced: false });
+					priors.push(p[j] as number);
+				});
+				continue;
+			}
+		}
+		cands.push({ msg: i, unit: -1, text: m.content, tokens: msgTokens[i] as number, rel: 0, score: 0, forced: false });
+		priors.push(0);
+	}
 
-	// Build injected context
-	const injectedContext = shards.map((s) => s.content).join("\n\n");
+	// 2. Score every candidate against the question (BM25 + identifier hits),
+	// blended with recency and, for pieces of big messages, a salience prior.
+	const docs = cands.map((c) => makeDoc(c.text));
+	const bm = new Bm25(docs);
+	// Bounded: callers pass the whole last user message, which may be a huge paste.
+	const q = query.slice(-2000);
+	const qTerms = [...new Set(termsOf(q))];
+	const qIds = identifiers(q);
+	const raw = qTerms.length ? cands.map((_, i) => bm.score(qTerms, i)) : [];
+	// Normalize against everything EXCEPT the question's own message, which is
+	// its own best match and would squash every real candidate toward zero.
+	const maxRaw = raw.length
+		? Math.max(0, ...raw.filter((_, i) => (cands[i] as Candidate).msg !== lastUser))
+		: 0;
 
-	const shardedTokens = shards.reduce((sum, s) => sum + s.tokens, 0);
+	cands.forEach((c, i) => {
+		let rel = maxRaw > 0 ? (raw[i] as number) / maxRaw : 0;
+		const lower = c.text.toLowerCase();
+		for (const id of qIds) if (lower.includes(id)) rel += 0.8;
+		c.rel = rel;
+		const recency = n > 1 ? c.msg / (n - 1) : 1;
+		c.score = 0.6 * Math.min(1.8, rel) + 0.3 * recency + 0.12 * Math.min(2.5, priors[i] as number);
+	});
 
+	// 3. Selection. Forced first: system prompts, the question, and the turn
+	// right before it (the thing the question usually refers to).
+	let remaining = maxTokens;
+	const chosen: Candidate[] = [];
+	const picked = new Set<Candidate>();
+	const dup = new DupIndex(0.85);
+	let shardsDeduped = 0;
+
+	const index = new Map<Candidate, number>();
+	cands.forEach((c, i) => index.set(c, i));
+	const docOf = (c: Candidate) => docs[index.get(c) as number] as ReturnType<typeof makeDoc>;
+	const take = (c: Candidate, force = false): boolean => {
+		if (picked.has(c)) return false;
+		if (!force && c.tokens > remaining) return false;
+		picked.add(c);
+		chosen.push(c);
+		remaining -= c.tokens;
+		dup.add(docOf(c));
+		return true;
+	};
+
+	for (const c of cands) {
+		if (messages[c.msg]?.role === "system" && c.tokens <= remaining) {
+			c.forced = true;
+			take(c);
+		}
+	}
+	for (const c of cands) {
+		if (c.msg !== lastUser) continue;
+		const units = unitsByMsg.get(c.msg);
+		// The question is the whole message, or the tail of a big one.
+		if (c.unit === -1 || (units && c.unit === units.length - 1)) {
+			c.forced = true;
+			take(c, true);
+		}
+	}
+	const before = lastUser - 1;
+	if (before >= 0 && messages[before]?.role !== "system") {
+		for (const c of cands) {
+			if (c.msg === before && c.unit === -1 && c.tokens <= maxTokens * 0.35) {
+				c.forced = true;
+				take(c);
+			}
+		}
+	}
+
+	let maxRel = 0;
+	for (const c of cands) if (c.msg !== lastUser) maxRel = Math.max(maxRel, c.rel);
+	const relBar = Math.max(MIN_RELEVANCE, REL_RATIO * maxRel);
+	const earns = (c: Candidate) =>
+		c.rel >= relBar ||
+		(priors[index.get(c) as number] as number) >= MIN_PRIOR ||
+		// Continuity applies to whole turns, not to pieces of a big paste.
+		(c.unit === -1 && c.msg > n - 1 - RECENT_TURNS);
+
+	const ranked = cands.filter((c) => !picked.has(c)).sort((a, b) => b.score - a.score);
+	for (const c of ranked) {
+		if (remaining <= 0) break;
+		if (c.score < SCORE_FLOOR || !earns(c)) continue;
+		if (dup.isDup(docOf(c))) {
+			shardsDeduped++;
+			continue;
+		}
+		take(c);
+	}
+
+	// 4. Keep a question and its answer together: a selected user turn pulls in
+	// the assistant reply that follows it, and vice versa, when budget allows.
+	const pairCap = maxTokens * 0.25;
+	for (const c of [...chosen].sort((a, b) => b.score - a.score)) {
+		if (c.unit !== -1) continue;
+		const role = messages[c.msg]?.role;
+		const mate = role === "user" ? c.msg + 1 : role === "assistant" ? c.msg - 1 : -1;
+		const mateMsg = messages[mate];
+		if (!mateMsg || mateMsg.role === "system") continue;
+		const wanted = role === "user" ? mateMsg.role === "assistant" : mateMsg.role === "user";
+		if (!wanted) continue;
+		for (const m of cands) {
+			if (m.msg === mate && m.unit === -1 && !picked.has(m) && m.tokens <= Math.min(remaining, pairCap)) {
+				if (dup.isDup(docOf(m))) continue;
+				take(m);
+			}
+		}
+	}
+
+	// 5. Assemble per message, in conversation order.
+	const assemble = (): Map<number, { content: string; rel: number }> => {
+		const parts = new Map<number, { whole: boolean; units: Set<number>; rel: number }>();
+		for (const c of chosen) {
+			const p = parts.get(c.msg) ?? { whole: false, units: new Set<number>(), rel: 0 };
+			if (c.unit === -1) p.whole = true;
+			else p.units.add(c.unit);
+			p.rel = Math.max(p.rel, c.rel);
+			parts.set(c.msg, p);
+		}
+		const out = new Map<number, { content: string; rel: number }>();
+		for (const [i, p] of parts) {
+			const units = unitsByMsg.get(i);
+			const content =
+				p.whole || !units || p.units.size === units.length
+					? (messages[i] as ChatMessage).content
+					: assembleUnits(units, p.units);
+			out.set(i, { content, rel: p.rel });
+		}
+		return out;
+	};
+
+	let built = assemble();
+	let used = 0;
+	for (const v of built.values()) used += estimateTokens(v.content);
+	// Gap markers cost a few tokens the greedy pass did not see: shed the
+	// least valuable pieces until the result honors the budget.
+	if (used > maxTokens) {
+		const droppable = chosen.filter((c) => !c.forced).sort((a, b) => a.score - b.score);
+		for (const c of droppable) {
+			if (used <= maxTokens) break;
+			chosen.splice(chosen.indexOf(c), 1);
+			built = assemble();
+			used = 0;
+			for (const v of built.values()) used += estimateTokens(v.content);
+		}
+	}
+
+	const shards: KnowledgeShard[] = [...built.entries()]
+		.sort(([a], [b]) => a - b)
+		.map(([i, v]) => ({
+			id: `shard-${i}`,
+			content: v.content,
+			relevanceScore: Math.min(1, v.rel),
+			sourceIndices: [i],
+			tokens: estimateTokens(v.content),
+		}));
+
+	const shardedTokens = shards.reduce((sum, sh) => sum + sh.tokens, 0);
 	return {
-		injectedContext,
+		injectedContext: shards.map((sh) => sh.content).join("\n\n"),
 		shards,
-		originalTokens: skeleton.totalTokens,
+		originalTokens: totalTokens,
 		shardedTokens,
-		compressionRatio:
-			skeleton.totalTokens > 0 ? shardedTokens / skeleton.totalTokens : 1,
-		// New additive metrics (v1.6.26): how many near-duplicate shards were
-		// collapsed, and how much of the budget was used vs. the total.
+		compressionRatio: totalTokens > 0 ? shardedTokens / totalTokens : 1,
 		shardsDeduped,
 		budgetUsed: shardedTokens,
 		budgetTotal: maxTokens,

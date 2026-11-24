@@ -2,6 +2,7 @@
 // Converts raw text into compressed, high-density semantic representations
 // Target: <50ms local execution
 
+import { Bm25, DupIndex, type Doc, identifiers, makeDoc, termsOf } from "./text-index.ts";
 import { estimateTokens } from "./token-counter.ts";
 import type { ChatMessage, EntityHeadline, FoldingResult } from "./types.ts";
 
@@ -64,7 +65,7 @@ const ENTITY_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
 	{ type: "class", pattern: /(?:class|interface|type|struct)\s+(\w+)/g },
 	{
 		type: "file_path",
-		pattern: /(?:[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml))/g,
+		pattern: /(?:[\w./-]{1,120}\.(?:ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml))/g,
 	},
 	{ type: "url", pattern: /https?:\/\/[^\s,)]+/g },
 	{
@@ -106,18 +107,43 @@ function extractEntities(text: string): string[] {
 	return [...entities];
 }
 
-function extractActions(text: string): string[] {
-	const lower = text.toLowerCase();
-	const found = new Set<string>();
-	for (const verb of ACTION_VERBS) {
-		if (lower.includes(verb)) {
-			found.add(verb);
-		}
+/**
+ * Surface forms → base verb ("deploying", "deployed", "deploys" → "deploy").
+ * Matching whole words replaces the old `text.includes(verb)` test, which
+ * reported "add" for "address" and "run" for "truncate".
+ */
+const VERB_FORMS = new Map<string, string>();
+for (const verb of ACTION_VERBS) {
+	const last = verb[verb.length - 1] as string;
+	const stem = verb.endsWith("e") ? verb.slice(0, -1) : verb;
+	for (const form of [
+		verb,
+		`${verb}s`,
+		`${verb}es`,
+		`${verb}d`,
+		`${verb}ed`,
+		`${verb}ing`,
+		`${verb}ment`,
+		`${verb}er`,
+		`${stem}ing`,
+		`${verb}${last}ing`,
+		`${verb}${last}ed`,
+	]) {
+		if (!VERB_FORMS.has(form)) VERB_FORMS.set(form, verb);
 	}
-	return [...found];
 }
 
-// ─── Helpers: hashing & similarity (semantic dedup) ──────────────────────────
+function extractActions(text: string): string[] {
+	const found = new Set<string>();
+	for (const w of text.toLowerCase().match(/[a-z]+/g) ?? []) {
+		const verb = VERB_FORMS.get(w);
+		if (verb) found.add(verb);
+	}
+	// Stable, list-ordered output (callers show the first few).
+	return ACTION_VERBS.filter((v) => found.has(v));
+}
+
+// ─── Helpers: hashing ────────────────────────────────────────────────────────
 
 /**
  * FNV-1a 32-bit hash. Used to build compact fold-cache keys instead of using
@@ -133,68 +159,14 @@ function fnv1aHash(text: string): string {
 	return (hash >>> 0).toString(36);
 }
 
-/**
- * Term-frequency cosine similarity over lowercased word tokens. Cheap,
- * zero-dependency, and good enough to detect near-duplicate sentences for the
- * semantic-dedup fold. Returns a value in [0, 1].
- *
- * This is the literal "semantic folding" intent: collapse sentences that carry
- * the same information before they re-enter the context window.
- */
-function sentenceSimilarity(a: string, b: string): number {
-	const tokenize = (s: string) =>
-		s
-			.toLowerCase()
-			.split(/[^a-z0-9]+/i)
-			.filter((w) => w.length > 2);
-	const ta = tokenize(a);
-	const tb = tokenize(b);
-	if (ta.length === 0 || tb.length === 0) return 0;
+// ─── Sentence selection ──────────────────────────────────────────────────────
 
-	const freq = new Map<string, number>();
-	for (const w of ta) freq.set(w, (freq.get(w) ?? 0) + 1);
-	let dot = 0;
-	for (const w of tb) {
-		const c = freq.get(w);
-		if (c) dot += c; // |tb| term weight is 1, so dot = shared term count
-	}
-	// Cosine with |a|=sqrt(sum of squares of counts)=sqrt(ta.length) since each
-	// term appears with weight; |b|=sqrt(tb.length). Cheaper than full norm and
-	// monotonic with true cosine for ranking purposes.
-	const denom = Math.sqrt(ta.length) * Math.sqrt(tb.length);
-	return denom > 0 ? dot / denom : 0;
-}
-
-/**
- * Drop near-duplicate sentences from a list (keeping the higher-scored /
- * earlier one). Returns the deduplicated list, order preserved.
- *
- * @param scored - sentences with relevance scores and original positions
- * @param threshold - cosine similarity above which two sentences are treated
- *   as duplicates (default 0.85)
- */
 interface ScoredSentence {
 	text: string;
 	score: number;
 	hasCode: boolean;
 	position: number;
 }
-
-function dedupSentences(
-	scored: ScoredSentence[],
-	threshold = 0.85,
-): ScoredSentence[] {
-	const kept: ScoredSentence[] = [];
-	for (const candidate of scored) {
-		const isDup = kept.some(
-			(k) => sentenceSimilarity(k.text, candidate.text) >= threshold,
-		);
-		if (!isDup) kept.push(candidate);
-	}
-	return kept;
-}
-
-// ─── Sentence Compression ────────────────────────────────────────────────────
 
 function splitSentences(text: string): string[] {
 	return text
@@ -203,42 +175,69 @@ function splitSentences(text: string): string[] {
 		.filter((s) => s.length > 0);
 }
 
-function computeRelevanceScore(sentence: string): number {
-	let score = 0;
-	const lower = sentence.toLowerCase();
+/**
+ * Score every sentence. Higher = more worth keeping.
+ *
+ * The old score counted action-verb substrings and gave every sentence the
+ * same flat +0.1, so it ranked by accident and ignored the question entirely.
+ * This one asks what a sentence is *for*:
+ *
+ *   information  how many rare (within this text) terms it carries
+ *   salience     digits, ids, code spans: the actual facts
+ *   query        BM25 against the question, plus exact identifier hits
+ *   filler       pleasantries and acknowledgements are pushed down hard
+ *
+ * With a query the question dominates; without one, information leads and the
+ * opening sentence (usually the framing) gets a nudge.
+ */
+function scoreSentences(sentences: string[], docs: Doc[], query: string): number[] {
+	const n = sentences.length;
+	const index = new Bm25(docs);
 
-	// Sentences with action verbs are more relevant
-	for (const verb of ACTION_VERBS) {
-		if (lower.includes(verb)) score += 0.15;
-	}
+	const info = docs.map((d) => {
+		let sum = 0;
+		for (const t of d.tf.keys()) sum += index.idf(t);
+		return d.tf.size ? sum / Math.sqrt(d.tf.size) : 0;
+	});
+	const maxInfo = Math.max(...info, 1e-9);
 
-	// Sentences with code refs are more relevant
-	if (/`[^`]+`/.test(sentence)) score += 0.2;
+	const qTerms = [...new Set(termsOf(query))];
+	const qIds = identifiers(query);
+	const bm = qTerms.length ? docs.map((_, i) => index.score(qTerms, i)) : [];
+	const maxBm = bm.length ? Math.max(...bm) : 0;
 
-	// Sentences with numbers/metrics are more relevant
-	if (/\d+/.test(sentence)) score += 0.1;
+	return sentences.map((sentence, i) => {
+		const d = docs[i] as Doc;
+		let score = 0.6 * ((info[i] as number) / maxInfo);
 
-	// Shorter sentences tend to be more information-dense
-	const words = sentence.split(/\s+/).length;
-	if (words <= 15) score += 0.15;
-	else if (words <= 30) score += 0.05;
+		score += Math.min(0.45, 0.15 * d.salient.size);
+		if (/`[^`]+`/.test(sentence)) score += 0.15;
+		if (sentence.split(/\s+/).length <= 15) score += 0.05;
 
-	// Sentences at the start or end of a paragraph are more important
-	score += 0.1;
+		if (maxBm > 0) {
+			score += 0.9 * ((bm[i] as number) / maxBm);
+			const lower = sentence.toLowerCase();
+			for (const id of qIds) if (lower.includes(id)) score += 0.8;
+		} else if (i === 0 && n > 1) {
+			score += 0.25;
+		}
 
-	return Math.min(score, 1);
+		if (d.fillerRatio >= 0.25) score *= 0.35;
+		return score;
+	});
 }
 
 function compressSentence(sentence: string): string {
 	let compressed = sentence;
 
-	// Remove filler words & hedging phrases
+	// Remove filler words & hedging phrases. The lookarounds keep hyphenated
+	// compounds intact ("just-in-time" must not become "-in-time").
 	compressed = compressed.replace(
-		/\b(?:basically|actually|essentially|really|very|quite|just|perhaps|maybe|kind of|sort of|I think|I believe|I feel|it seems|it appears|in order to|due to the fact that|for the purpose of|needless to say|as a matter of fact|at the end of the day|in terms of|when it comes to|the fact that|a number of|a lot of|lots of|in my opinion|from my perspective|needless to say|going forward|at this point in time|at the present time|in the event that)\b/gi,
+		/(?<![\w-])(?:basically|actually|essentially|really|very|quite|just|perhaps|maybe|kind of|sort of|I think|I believe|I feel|it seems|it appears|in order to|due to the fact that|for the purpose of|needless to say|as a matter of fact|at the end of the day|in terms of|when it comes to|the fact that|a number of|a lot of|lots of|in my opinion|from my perspective|going forward|at this point in time|at the present time|in the event that)(?![\w-])/gi,
 		"",
 	);
 
-	// Collapse redundant phrases → terse equivalents
+	// Collapse redundant phrases → terse equivalents (each is a real token win).
 	compressed = compressed
 		.replace(/\b(?:in order to|so as to)\b/gi, "to")
 		.replace(/\b(?:due to the fact that|owing to the fact that)\b/gi, "because")
@@ -252,20 +251,8 @@ function compressSentence(sentence: string): string {
 		.replace(/\b(?:is able to)\b/gi, "can")
 		.replace(/\b(?:in the near future)\b/gi, "soon");
 
-	// Expand common contractions to their shorter root where it reduces length
-	// (e.g. "do not" → "don't") — net token win for most tokenizers.
-	compressed = compressed
-		.replace(/\bdo not\b/gi, "don't")
-		.replace(/\bdoes not\b/gi, "doesn't")
-		.replace(/\bdid not\b/gi, "didn't")
-		.replace(/\bis not\b/gi, "isn't")
-		.replace(/\bare not\b/gi, "aren't")
-		.replace(/\bwill not\b/gi, "won't")
-		.replace(/\bcannot\b/gi, "can't")
-		.replace(/\bit is\b/gi, "it's")
-		.replace(/\bthey are\b/gi, "they're")
-		.replace(/\bwe are\b/gi, "we're")
-		.replace(/\byou are\b/gi, "you're");
+	// Contractions are deliberately NOT applied: "do not" → "don't" measures as
+	// 2 → 3 tokens, so the old rewrite made every such sentence more expensive.
 
 	// Collapse whitespace
 	compressed = compressed.replace(/\s+/g, " ").trim();
@@ -288,6 +275,9 @@ function buildHeadline(actions: string[], entities: string[]): string {
 	const parts = [actionPart, entityPart].filter(Boolean);
 	return parts.join("");
 }
+
+/** Longest question text analysed when steering a fold or a shard. */
+const MAX_QUERY_CHARS = 2000;
 
 // ─── Main Folding Function ───────────────────────────────────────────────────
 
@@ -332,11 +322,15 @@ export function foldCacheSize(): number {
 
 export function foldText(
 	text: string,
-	options: { maxTokens?: number; preserveCode?: boolean } = {},
+	options: { maxTokens?: number; preserveCode?: boolean; query?: string } = {},
 ): FoldingResult {
-	// Cache key uses a compact FNV-1a hash of the text + options, so the cache
-	// Map isn't bloated by full prompt strings (which can be thousands of chars).
-	const cacheKey = `${options.maxTokens ?? 2000}|${options.preserveCode ? "1" : "0"}|${fnv1aHash(text)}`;
+	// Only the tail of a long question matters (a paste's question is its last
+	// lines), and bounding it keeps the per-call cost independent of paste size.
+	const query = (options.query ?? "").slice(-MAX_QUERY_CHARS);
+	// Cache key: options + a compact hash of the text (and of the question,
+	// which now steers selection). The length guards the 32-bit hash against
+	// colliding two different texts of different sizes.
+	const cacheKey = `${options.maxTokens ?? 2000}|${options.preserveCode ? "1" : "0"}|${text.length}:${fnv1aHash(text)}|${query ? fnv1aHash(query) : ""}`;
 	const cached = getCachedFold(cacheKey);
 	if (cached) return cached;
 
@@ -349,25 +343,38 @@ export function foldText(
 	const entities = extractEntities(text);
 	const actions = extractActions(text);
 
-	// Split into sentences and score. Track original position so we can
-	// restore narrative flow after relevance-based selection.
-	const sentences = splitSentences(text);
-	let scored: ScoredSentence[] = sentences.map((s, position) => ({
+	// Split into sentences, tokenize each ONCE, and drop near-duplicates through
+	// the inverted index. Duplicates must also agree on every number/id, so two
+	// sentences that differ only in a port or a version both survive.
+	const all = splitSentences(text);
+	const dup = new DupIndex(0.85);
+	const sentences: string[] = [];
+	const docs: Doc[] = [];
+	const positions: number[] = [];
+	all.forEach((sentence, position) => {
+		const doc = makeDoc(sentence);
+		if (dup.isDup(doc)) return;
+		dup.add(doc);
+		sentences.push(sentence);
+		docs.push(doc);
+		positions.push(position);
+	});
+
+	const scores = scoreSentences(sentences, docs, query);
+	const scored: ScoredSentence[] = sentences.map((s, i) => ({
 		text: s,
-		score: computeRelevanceScore(s),
+		score: scores[i] as number,
 		hasCode: /`[^`]+`/.test(s) || /```[\s\S]*?```/.test(s),
-		position,
+		position: positions[i] as number,
 	}));
 
-	// Semantic dedup: drop near-duplicate sentences (cosine sim >= 0.85) before
-	// budget allocation. This is the core "semantic folding" operation —
-	// collapse sentences carrying the same information.
-	scored = dedupSentences(scored, 0.85);
-
-	// Select by relevance, prioritizing code blocks when requested.
+	// Without a question, code-bearing sentences keep their old absolute
+	// priority. With one, the question decides: a code span that has nothing to
+	// do with it should not outrank the sentence that answers it.
+	const codeFirst = preserveCode && !query;
 	const sorted = [...scored].sort((a, b) => {
-		if (preserveCode && a.hasCode && !b.hasCode) return -1;
-		if (preserveCode && !a.hasCode && b.hasCode) return 1;
+		if (codeFirst && a.hasCode && !b.hasCode) return -1;
+		if (codeFirst && !a.hasCode && b.hasCode) return 1;
 		return b.score - a.score;
 	});
 
@@ -382,20 +389,20 @@ export function foldText(
 			kept.push({ ...item, text: compressed });
 			tokenBudget -= tokens;
 		}
-		if (tokenBudget <= 0) break;
+		// Nothing shorter than a few tokens is worth a sentence slot.
+		if (tokenBudget < 3) break;
 	}
 
-	// Restore original narrative order so the folded text reads coherently
-	// (previously, relevance sort shuffled the sentence flow).
+	// Restore original narrative order so the folded text reads coherently.
 	kept.sort((a, b) => a.position - b.position);
 
-	// Build the headline. Adaptive: only prepend the EDH headline when the fold
-	// is actually compressing. For small/already-dense prompts the headline is
-	// pure overhead and previously caused output to exceed the input (the
-	// "58 → 74 tokens" expansion case). Skip it when the kept body alone is
-	// already <= originalTokens.
-	const headline = buildHeadline(actions, entities);
+	// Build the headline. It exists to carry what the body lost, so list only
+	// entities that no kept sentence already contains (the old headline repeated
+	// the first five entities of the input, kept or not). Adaptive as before:
+	// skipped when the fold is not actually compressing.
 	const body = kept.map((k) => k.text).join(" ");
+	const lost = entities.filter((e) => !body.includes(e));
+	const headline = buildHeadline(actions, lost);
 	const bodyTokens = estimateTokens(body);
 	const useHeadline =
 		headline.length > 0 &&
@@ -448,6 +455,11 @@ export function foldMessages(
 		 * rest of the prompt exists to support. Pipelines should set this.
 		 */
 		preserveLastUser?: boolean;
+		/**
+		 * What the model has to answer. Sentences are kept or dropped with this in
+		 * mind. Defaults to the preserved final user turn when there is one.
+		 */
+		query?: string;
 	} = {},
 ): {
 	messages: ChatMessage[];
@@ -467,6 +479,11 @@ export function foldMessages(
 			}
 		}
 	}
+	// The preserved final turn IS the question; steer every other fold with it.
+	// Capped to its tail: a long paste's question is its last lines.
+	const query =
+		options.query ??
+		(lastUserIdx >= 0 ? (messages[lastUserIdx] as ChatMessage).content.slice(-600) : "");
 
 	const result: ChatMessage[] = [];
 	let totalOriginalTokens = 0;
@@ -526,6 +543,7 @@ export function foldMessages(
 		const foldResult = foldText(msg.content, {
 			maxTokens: maxTokensForMsg,
 			preserveCode: true,
+			query,
 		});
 
 		// A fold must never erase a turn. If it comes back blank, the original

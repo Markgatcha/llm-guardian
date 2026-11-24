@@ -70,10 +70,10 @@ export type BenchReport = {
 };
 
 const text = (ms: readonly ChatMessage[]) => ms.map((m) => m.content).join("\n\n");
-const tokens = (ms: readonly ChatMessage[]) =>
+export const tokens = (ms: readonly ChatMessage[]) =>
 	ms.reduce((s, m) => s + estimateTokens(m.content), 0);
 
-function score(ms: readonly ChatMessage[], needles: string[]): ArmResult {
+export function score(ms: readonly ChatMessage[], needles: string[]): ArmResult {
 	const hay = text(ms).toLowerCase();
 	const dropped = needles.filter((n) => !hay.includes(n.toLowerCase()));
 	return {
@@ -110,7 +110,7 @@ function tailWithin(s: string, budget: number): string {
 }
 
 /** Sliding window: system + newest turns that fit; the boundary turn is cut. */
-function windowTo(ms: readonly ChatMessage[], budget: number): ChatMessage[] {
+export function windowTo(ms: readonly ChatMessage[], budget: number): ChatMessage[] {
 	const system = ms.filter((m) => m.role === "system");
 	const rest = ms.filter((m) => m.role !== "system");
 	let room = budget - tokens(system);

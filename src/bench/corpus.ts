@@ -29,7 +29,7 @@ export type Scenario = {
 };
 
 /** mulberry32 — tiny seeded PRNG. */
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
 	let a = seed >>> 0;
 	return () => {
 		a = (a + 0x6d2b79f5) >>> 0;
@@ -40,7 +40,7 @@ function rng(seed: number): () => number {
 	};
 }
 
-const msg = (role: ChatMessage["role"], content: string): ChatMessage => ({
+export const msg = (role: ChatMessage["role"], content: string): ChatMessage => ({
 	role,
 	content,
 });
@@ -62,11 +62,11 @@ const FILLER_USER = [
 	"cool, can you explain a little more about why that would matter here",
 ];
 
-function pick<T>(r: () => number, xs: readonly T[]): T {
+export function pick<T>(r: () => number, xs: readonly T[]): T {
 	return xs[Math.floor(r() * xs.length)] as T;
 }
 
-function hex(r: () => number, n: number): string {
+export function hex(r: () => number, n: number): string {
 	let s = "";
 	for (let i = 0; i < n; i++) s += Math.floor(r() * 16).toString(16);
 	return s;

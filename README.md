@@ -425,6 +425,7 @@ quality**, not just token counts:
 | `bun run bench:context-loss` | **Fact retention** — declared ground-truth facts survive the real pipeline (retain → fold → shard). 100% expected. Model-free. | No |
 | `bun run bench:quality` | **Answer fidelity** — same conversation sent raw vs. optimized to a local model; the gate is the *delta* (optimizing must not lower recall). | Yes (local model) |
 | `bun run bench:orchestrator` | Size + latency of the pipeline only (existing). | No |
+| `bun run bench:engines` | **Folding and sharding in isolation** — fact retention at equal token budget vs. a sliding window, plus cold timing and a scaling table. Model-free. | No |
 | `bun run bench:harness` (or `guardian bench`) | **Realistic-size A/B** — the real pipeline on 1.5k–6k token workloads (debug chat, logs, JSON, docs) vs. equal-token-budget baselines: token reduction, fact retention, overhead. Model-free. | No |
 
 ```bash
@@ -462,6 +463,27 @@ pure paraphrase and to questions that need comparing values, as the two
 adversarial rows show. Overhead is ~1–10 ms p95. The earlier
 `bench:context-loss` corpus is under 250 tokens, below the fold/shard gates, so
 it never exercised these paths.
+
+`bench:engines` runs the fold and shard engines on their own (same-machine
+comparison against the previous engines, median of 3 runs):
+
+| Scenario | Before: tokens / facts kept | After: tokens / facts kept |
+|---|---|---|
+| Fold: 36 sentences identical but for one value | 56 / **0%** | 214 / **100%** |
+| Shard: facts scattered over a 57-turn chat | 179 / 67% | 313 / **100%** |
+| Shard: one 6k-token message, small budget | 27 / **0%** | 66 / **100%** |
+| Shard: 36 near-identical status turns | 59 / 20% | 81 / **100%** |
+| Shard: answer is in the previous turn | 124 / 100% | 124 / 100% |
+
+Speed (cold, ms): sharding is **1.6–2.1× faster** on 100–1000 turn conversations
+(1000 turns: 28.8 → 14.0 ms). Folding is **~1.35× slower** (32k tokens: 25.6 →
+~35 ms) because it now scores every sentence by information, salience and the
+question instead of by accident; both stay linear in input size. What changed:
+duplicate detection no longer merges sentences that differ in a number or id;
+folding is steered by the question; sharding selects log lines, records and
+paragraphs instead of whole messages, and treats `maxTokens` as a ceiling, not
+a target. Pathological input (a 200,000-character token) used to take ~115 s in
+fold and ~61 s in shard and now takes under 250 ms.
 
 `bench:live` sends the same conversation raw and optimized to a real model
 (OpenRouter free models work, no cost) and scores the **answers**, using the
