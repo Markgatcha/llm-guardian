@@ -10,7 +10,8 @@ import {
 	completeStream,
 	selectModel,
 } from "../providers/openrouter-adapter.ts";
-import { estimateTokens, foldMessages } from "./folding-engine.ts";
+import { extractThenFold, totalTokens } from "./context-stage.ts";
+import { estimateTokens } from "./folding-engine.ts";
 import { fuseToolMessages } from "./tool-fuser.ts";
 import { gateTools } from "./tool-gater.ts";
 import {
@@ -191,17 +192,17 @@ export async function orchestrate(
 		workingMessages.filter((m) => m.role === "user").pop()?.content || "";
 
 	if (request.enableFolding && originalPromptTokens > 1000) {
-		const foldResult = foldMessages(workingMessages, {
-			maxTokens: 2000,
-			preserveSystem: true,
-			preserveLastUser: true,
+		const before = totalTokens(workingMessages);
+		const stage = extractThenFold(workingMessages, {
+			foldGate: 1000,
+			foldMaxTokens: 2000,
 		});
-		workingMessages = foldResult.messages;
-		optimization.foldingApplied = true;
-		optimization.foldingCompressionRatio = foldResult.metadata.compressionRatio;
-		optimization.foldingTimeMs = foldResult.foldingTimeMs;
-		optimization.totalTokensSaved +=
-			foldResult.metadata.originalTokens - foldResult.metadata.foldedTokens;
+		const after = totalTokens(stage.messages);
+		workingMessages = stage.messages;
+		optimization.foldingApplied = stage.folded || stage.extracted;
+		optimization.foldingCompressionRatio = before > 0 ? after / before : 1;
+		optimization.foldingTimeMs = stage.foldingTimeMs;
+		optimization.totalTokensSaved += Math.max(0, before - after);
 	}
 
 	// ── Step 3b: Memory Pack Injection (AI Trio / MemOS) ────────────────────
@@ -477,12 +478,12 @@ export async function* orchestrateStream(
 		0,
 	);
 	if (request.enableFolding && originalTokens > 1000) {
-		const foldResult = foldMessages(workingMessages, { preserveLastUser: true });
-		workingMessages = foldResult.messages;
-		optimization.foldingApplied = true;
-		optimization.foldingCompressionRatio = foldResult.metadata.compressionRatio;
-		optimization.totalTokensSaved +=
-			foldResult.metadata.originalTokens - foldResult.metadata.foldedTokens;
+		const stage = extractThenFold(workingMessages, { foldGate: 1000 });
+		const after = totalTokens(stage.messages);
+		workingMessages = stage.messages;
+		optimization.foldingApplied = stage.folded || stage.extracted;
+		optimization.foldingCompressionRatio = originalTokens > 0 ? after / originalTokens : 1;
+		optimization.totalTokensSaved += Math.max(0, originalTokens - after);
 	}
 
 	// Tool Gating (same as non-streaming path)

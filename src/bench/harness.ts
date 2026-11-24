@@ -42,8 +42,11 @@ export type ScenarioResult = {
 	name: string;
 	description: string;
 	control: boolean;
+	hard: boolean;
+	/** Seeded variants averaged into this row. */
+	variants: number;
 	arms: Record<ArmName, ArmResult>;
-	stages: { folded: boolean; sharded: boolean };
+	stages: { extracted: boolean; folded: boolean; sharded: boolean };
 	latencyMs: { p50: number; p95: number };
 };
 
@@ -58,6 +61,8 @@ export type BenchReport = {
 		/** Mean needle retention, guardian vs equal-budget window. */
 		guardianRetention: number;
 		windowRetention: number;
+		/** Same, over the deliberately adversarial scenarios only. */
+		hardRetention: number;
 		/** Scenarios where guardian dropped at least one needle. */
 		scenariosWithLoss: string[];
 		worstP95Ms: number;
@@ -151,21 +156,55 @@ function runScenario(s: Scenario, iterations: number): ScenarioResult {
 		name: s.name,
 		description: s.description,
 		control: !!s.control,
+		hard: !!s.hard,
+		variants: 1,
 		arms: {
 			raw: score(s.messages, s.needles),
 			minify: score(minify(s.messages), s.needles),
 			window: score(windowTo(s.messages, guardianTokens), s.needles),
 			guardian: score(last.messages, s.needles),
 		},
-		stages: { folded: last.folded, sharded: last.sharded },
+		stages: { extracted: last.extracted, folded: last.folded, sharded: last.sharded },
 		latencyMs: { p50: percentile(samples, 0.5), p95: percentile(samples, 0.95) },
 	};
 }
 
-export function runBenchmark(opts: { iterations?: number } = {}): BenchReport {
-	const iterations = opts.iterations ?? 15;
-	const scenarios = buildCorpus().map((s) => runScenario(s, iterations));
-	const real = scenarios.filter((s) => !s.control);
+/** Average one scenario's seeded variants into a single row. */
+function mergeVariants(rs: ScenarioResult[]): ScenarioResult {
+	const first = rs[0] as ScenarioResult;
+	const mean = (f: (r: ScenarioResult) => number) => rs.reduce((s, r) => s + f(r), 0) / rs.length;
+	const arm = (a: ArmName): ArmResult => ({
+		tokens: Math.round(mean((r) => r.arms[a].tokens)),
+		retention: mean((r) => r.arms[a].retention),
+		dropped: [...new Set(rs.flatMap((r) => r.arms[a].dropped))],
+	});
+	return {
+		...first,
+		variants: rs.length,
+		arms: { raw: arm("raw"), minify: arm("minify"), window: arm("window"), guardian: arm("guardian") },
+		stages: {
+			extracted: rs.some((r) => r.stages.extracted),
+			folded: rs.some((r) => r.stages.folded),
+			sharded: rs.some((r) => r.stages.sharded),
+		},
+		latencyMs: {
+			p50: mean((r) => r.latencyMs.p50),
+			p95: Math.max(...rs.map((r) => r.latencyMs.p95)),
+		},
+	};
+}
+
+export function runBenchmark(opts: { iterations?: number; variants?: number } = {}): BenchReport {
+	const iterations = opts.iterations ?? 10;
+	const byName = new Map<string, ScenarioResult[]>();
+	for (const s of buildCorpus(opts.variants)) {
+		const list = byName.get(s.name) ?? [];
+		list.push(runScenario(s, iterations));
+		byName.set(s.name, list);
+	}
+	const scenarios = [...byName.values()].map(mergeVariants);
+	const real = scenarios.filter((s) => !s.control && !s.hard);
+	const hard = scenarios.filter((s) => s.hard);
 	const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 	return {
@@ -177,8 +216,13 @@ export function runBenchmark(opts: { iterations?: number } = {}): BenchReport {
 			meanReduction: mean(
 				real.map((s) => 1 - s.arms.guardian.tokens / Math.max(1, s.arms.raw.tokens)),
 			),
-			guardianRetention: mean(scenarios.map((s) => s.arms.guardian.retention)),
-			windowRetention: mean(scenarios.map((s) => s.arms.window.retention)),
+			guardianRetention: mean(
+				scenarios.filter((s) => !s.hard).map((s) => s.arms.guardian.retention),
+			),
+			windowRetention: mean(
+				scenarios.filter((s) => !s.hard).map((s) => s.arms.window.retention),
+			),
+			hardRetention: mean(hard.map((s) => s.arms.guardian.retention)),
 			scenariosWithLoss: scenarios
 				.filter((s) => s.arms.guardian.retention < 1)
 				.map((s) => s.name),
@@ -207,12 +251,16 @@ export function formatReport(r: BenchReport): string[] {
 	out.push(head, "-".repeat(head.length));
 	for (const s of r.scenarios) {
 		const saved = 1 - s.arms.guardian.tokens / Math.max(1, s.arms.raw.tokens);
-		const stages = [s.stages.folded ? "fold" : "", s.stages.sharded ? "shard" : ""]
+		const stages = [
+			s.stages.extracted ? "extract" : "",
+			s.stages.folded ? "fold" : "",
+			s.stages.sharded ? "shard" : "",
+		]
 			.filter(Boolean)
 			.join("+");
 		out.push(
 			[
-				s.name.padEnd(15),
+				(s.hard ? `${s.name}†` : s.name).padEnd(15),
 				String(s.arms.raw.tokens).padStart(8),
 				String(s.arms.guardian.tokens).padStart(9),
 				pct(Math.max(0, saved)).padStart(6),
@@ -227,11 +275,13 @@ export function formatReport(r: BenchReport): string[] {
 		}
 	}
 	out.push("", "* window = sliding window cut to Guardian's token budget (equal-budget baseline)");
+	out.push("† adversarial: question has no lexical link to the answer (reported separately)");
 	out.push(
 		"",
 		`mean token reduction (non-control) : ${pct(r.summary.meanReduction, 1)}`,
 		`fact retention  guardian            : ${pct(r.summary.guardianRetention, 1)}`,
 		`fact retention  equal-budget window : ${pct(r.summary.windowRetention, 1)}`,
+		`fact retention  adversarial cases   : ${pct(r.summary.hardRetention, 1)}`,
 		`worst p95 overhead                  : ${r.summary.worstP95Ms.toFixed(2)} ms`,
 		`tokenizer                           : ${r.tokenizer}`,
 	);

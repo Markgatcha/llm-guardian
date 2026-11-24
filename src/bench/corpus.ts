@@ -21,6 +21,11 @@ export type Scenario = {
 	needles: string[];
 	/** True for the control: below the gates, the pipeline should be a no-op. */
 	control?: boolean;
+	/**
+	 * A deliberately adversarial case (no lexical link between question and
+	 * answer). Reported separately so it can't flatter or sink the headline.
+	 */
+	hard?: boolean;
 };
 
 /** mulberry32 — tiny seeded PRNG. */
@@ -69,8 +74,8 @@ function hex(r: () => number, n: number): string {
 
 // ─── Scenarios ───────────────────────────────────────────────────────────────
 
-function debugSession(): Scenario {
-	const r = rng(11);
+function debugSession(seed: number): Scenario {
+	const r = rng(11 + seed * 7919);
 	const trace = Array.from(
 		{ length: 28 },
 		(_, i) =>
@@ -123,15 +128,16 @@ function debugSession(): Scenario {
 	};
 }
 
-function logDump(): Scenario {
-	const r = rng(23);
+function logDump(seed: number): Scenario {
+	const r = rng(23 + seed * 7919);
+	const at = 20 + Math.floor(r() * 220);
 	const lines: string[] = [];
 	for (let i = 0; i < 260; i++) {
 		const t = `2026-03-02T03:${String(Math.floor(i / 6)).padStart(2, "0")}:${String((i * 7) % 60).padStart(2, "0")}Z`;
 		lines.push(
 			`${t} INFO  req=${hex(r, 4)}-${hex(r, 4)} GET /api/v2/orders 200 ${20 + Math.floor(r() * 40)}ms cache=hit`,
 		);
-		if (i === 173) {
+		if (i === at) {
 			lines.push(
 				`${t} ERROR req=9f3c-77ab payment gateway timeout after 30000ms (upstream=billing-v2)`,
 			);
@@ -152,10 +158,11 @@ function logDump(): Scenario {
 	};
 }
 
-function toolJson(): Scenario {
-	const r = rng(37);
+function toolJson(seed: number): Scenario {
+	const r = rng(37 + seed * 7919);
+	const at = 5 + Math.floor(r() * 100);
 	const rows = Array.from({ length: 110 }, (_, i) => {
-		const special = i === 71;
+		const special = i === at;
 		return {
 			sku: special ? "ZX-4491-Q" : `SK-${1000 + i}-${String.fromCharCode(65 + (i % 26))}`,
 			warehouse: pick(r, ["ams-1", "fra-2", "dub-1"]),
@@ -174,12 +181,12 @@ function toolJson(): Scenario {
 			msg("user", `Tool result:\n${JSON.stringify(rows, null, 2)}`),
 			msg("user", "When is SKU ZX-4491-Q getting restocked, and how many are in stock?"),
 		],
-		needles: ["ZX-4491-Q", "2026-03-14", "backordered"],
+		needles: ["ZX-4491-Q", "2026-03-14"],
 	};
 }
 
-function docQa(): Scenario {
-	const r = rng(41);
+function docQa(seed: number): Scenario {
+	const r = rng(41 + seed * 7919);
 	const boiler = [
 		"The parties acknowledge that this Agreement constitutes the entire understanding between them and supersedes all prior discussions.",
 		"Each party shall bear its own costs and expenses incurred in connection with the negotiation and execution of this Agreement.",
@@ -187,12 +194,15 @@ function docQa(): Scenario {
 		"Notices under this Agreement must be in writing and delivered to the address specified in the signature page.",
 		"The headings used in this Agreement are for convenience only and do not affect its interpretation.",
 	];
+	const a = 3 + Math.floor(r() * 8);
+	const b = 14 + Math.floor(r() * 6);
+	const c = 24 + Math.floor(r() * 8);
 	const paras: string[] = [];
 	for (let i = 0; i < 34; i++) {
 		paras.push(`${i + 1}. ${pick(r, boiler)} ${pick(r, boiler)}`);
-		if (i === 9) paras.push("10A. The termination notice period is 45 days, given in writing.");
-		if (i === 17) paras.push("18A. The governing law of this Agreement is the law of Singapore.");
-		if (i === 26) paras.push("27A. Total liability is subject to a cap of USD 2,500,000.");
+		if (i === a) paras.push("10A. The termination notice period is 45 days, given in writing.");
+		if (i === b) paras.push("18A. Disputes shall be resolved by arbitration under rules reference ICC-4471.");
+		if (i === c) paras.push("27A. Total liability is subject to a cap of USD 2,500,000.");
 	}
 	return {
 		name: "doc-qa",
@@ -200,14 +210,14 @@ function docQa(): Scenario {
 		messages: [
 			msg("system", SYSTEM),
 			msg("user", `Please read this agreement:\n\n${paras.join("\n\n")}`),
-			msg("user", "What is the notice period, governing law and liability cap?"),
+			msg("user", "What is the notice period, the arbitration rules reference, and the liability cap?"),
 		],
-		needles: ["45 days", "Singapore", "2,500,000"],
+		needles: ["45 days", "ICC-4471", "2,500,000"],
 	};
 }
 
-function verboseChat(): Scenario {
-	const r = rng(53);
+function verboseChat(seed: number): Scenario {
+	const r = rng(53 + seed * 7919);
 	const messages: ChatMessage[] = [msg("system", SYSTEM)];
 	const facts = [
 		"We deploy with `kubectl rollout` into the `payments-prod` namespace.",
@@ -238,7 +248,7 @@ function verboseChat(): Scenario {
 	};
 }
 
-function shortChat(): Scenario {
+function shortChat(_seed: number): Scenario {
 	return {
 		name: "short-chat",
 		description: "Control: below the fold/shard gates, only the retain filter acts",
@@ -253,6 +263,131 @@ function shortChat(): Scenario {
 	};
 }
 
-export function buildCorpus(): Scenario[] {
-	return [debugSession(), logDump(), toolJson(), docQa(), verboseChat(), shortChat()];
+
+/** The question lives INSIDE the paste, as users really do it. */
+function inlineQuestion(seed: number): Scenario {
+	const r = rng(67 + seed * 7919);
+	const at = 20 + Math.floor(r() * 190);
+	const lines: string[] = [];
+	for (let i = 0; i < 220; i++) {
+		lines.push(
+			`2026-04-11 02:${String(i % 60).padStart(2, "0")}:11 [worker-${i % 4}] job ${hex(r, 6)} finished rows=${1000 + Math.floor(r() * 900)} in ${2 + Math.floor(r() * 3)}s`,
+		);
+		if (i === at) {
+			lines.push(
+				"2026-04-11 02:20:11 [worker-2] job 77ab31 aborted: disk quota exceeded on volume vol-ssd-09",
+			);
+		}
+	}
+	return {
+		name: "inline-question",
+		description: "Paste and question in ONE message",
+		messages: [
+			msg("system", SYSTEM),
+			msg("user", `${lines.join("\n")}\n\nWhich job aborted and on what volume?`),
+		],
+		needles: ["77ab31", "vol-ssd-09", "disk quota exceeded"],
+	};
+}
+
+/** Question wording shares no vocabulary with the answer sentence. */
+function paraphrase(seed: number): Scenario {
+	const r = rng(71 + seed * 7919);
+	const boiler = [
+		"The supplier will deliver the goods to the buyer's premises during normal business hours.",
+		"All amounts are exclusive of taxes unless the invoice states otherwise.",
+		"Each party keeps the other party's confidential information secret for the duration of the contract.",
+		"Amendments to these terms are only valid when signed by both parties.",
+		"Force majeure events suspend the obligations of the affected party for their duration.",
+	];
+	const at = 3 + Math.floor(r() * 34);
+	const paras: string[] = [];
+	for (let i = 0; i < 40; i++) {
+		// The needle paragraph is built exactly like its neighbours (number +
+		// three sentences) so structure alone cannot give it away.
+		const sentences =
+			i === at
+				? [pick(r, boiler), "Either party may cancel this contract by giving 45 days' prior written notice.", pick(r, boiler)]
+				: [pick(r, boiler), pick(r, boiler), pick(r, boiler)];
+		paras.push(`${i + 1}. ${sentences.join(" ")}`);
+	}
+	return {
+		name: "paraphrase",
+		description: "Question shares no keywords with the answer clause",
+		messages: [
+			msg("system", SYSTEM),
+			msg("user", `Contract text:\n\n${paras.join("\n\n")}`),
+			msg("user", "How long in advance can I walk away from this deal?"),
+		],
+		needles: ["45 days"],
+		hard: true,
+	};
+}
+
+/** A long source file; the answer is a constant buried in one function. */
+function codeFile(seed: number): Scenario {
+	const r = rng(97 + seed * 7919);
+	const at = 3 + Math.floor(r() * 30);
+	const fns = Array.from({ length: 36 }, (_, i) => {
+		const body =
+			i === at
+				? "  const MAX_RETRY_ATTEMPTS = 7;\n  const BACKOFF_BASE_MS = 250;\n  return retryWithBackoff(fn, MAX_RETRY_ATTEMPTS, BACKOFF_BASE_MS);"
+				: `  const value = compute${i}(input);\n  if (value == null) return null;\n  return transform${i}(value);`;
+		return `export function handler${i}(input: Input) {\n${body}\n}`;
+	});
+	return {
+		name: "code-file",
+		description: "Long source file, answer is a constant in one function",
+		messages: [
+			msg("system", SYSTEM),
+			msg("user", `Here is src/handlers.ts:\n\n\`\`\`ts\n${fns.join("\n\n")}\n\`\`\``),
+			msg("user", "What is the maximum number of retry attempts and the backoff base?"),
+		],
+		needles: ["MAX_RETRY_ATTEMPTS = 7", "BACKOFF_BASE_MS = 250"],
+	};
+}
+
+/** Answer is an ordinary-looking line; only meaning ("slowest") identifies it. */
+function slowest(seed: number): Scenario {
+	const r = rng(83 + seed * 7919);
+	const at = 10 + Math.floor(r() * 220);
+	const lines: string[] = [];
+	for (let i = 0; i < 240; i++) {
+		const ms = i === at ? 4120 : 30 + Math.floor(r() * 40);
+		lines.push(
+			`2026-05-02T09:${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i * 13) % 60).padStart(2, "0")}Z INFO req=${hex(r, 4)}-${hex(r, 4)} GET /api/v2/items 200 ${ms}ms`,
+		);
+	}
+	return {
+		name: "slowest-request",
+		description: "Needs numeric comparison, not keyword match",
+		messages: [
+			msg("system", SYSTEM),
+			msg("user", `Access log:\n${lines.join("\n")}`),
+			msg("user", "Which request was the slowest, and how long did it take?"),
+		],
+		needles: ["4120ms"],
+		hard: true,
+	};
+}
+
+/** Independent seeded variants per scenario (needle position + filler vary). */
+export const VARIANTS = 5;
+
+export function buildCorpus(variants = VARIANTS): Scenario[] {
+	const builders = [
+		debugSession,
+		logDump,
+		toolJson,
+		docQa,
+		verboseChat,
+		inlineQuestion,
+		codeFile,
+		paraphrase,
+		slowest,
+		shortChat,
+	];
+	return builders.flatMap((build) =>
+		Array.from({ length: variants }, (_, seed) => build(seed)),
+	);
 }

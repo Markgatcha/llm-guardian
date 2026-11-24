@@ -15,7 +15,7 @@
 // Pure TypeScript with no renderer imports, so the whole conversation layer
 // runs and tests headlessly.
 
-import { foldMessages } from "../core/folding-engine.ts";
+import { extractThenFold } from "../core/context-stage.ts";
 import { estimateTokens as countTokens } from "../core/token-counter.ts";
 import { shardMessages } from "../core/vcm-sharder.ts";
 import { decideRetain } from "../core/retain-filter.ts";
@@ -46,6 +46,8 @@ export interface TurnMetrics {
 	/** Which optimization stages fired this turn. */
 	folded: boolean;
 	sharded: boolean;
+	/** Query-aware extraction trimmed a large paste. */
+	extracted: boolean;
 	/** Real provider identity (e.g. "anthropic"), not the router name. */
 	provider: string;
 	/** The model id the request actually went out as. */
@@ -112,6 +114,7 @@ export function optimize(messages: ChatMessage[]): {
 	messages: ChatMessage[];
 	folded: boolean;
 	sharded: boolean;
+	extracted: boolean;
 } {
 	// Retain pre-filter: keep system + the latest user message; drop low-signal
 	// assistant acknowledgements that would otherwise be folded for nothing.
@@ -136,19 +139,15 @@ export function optimize(messages: ChatMessage[]): {
 		return verdict.retain;
 	});
 
-	let folded = false;
 	let sharded = false;
-	let out = working;
 
-	const promptTokens = out.reduce((s, m) => s + countTokens(m.content), 0);
-	if (promptTokens > FOLD_GATE) {
-		const result = foldMessages(out, {
-			maxTokens: FOLD_MAX_TOKENS,
-			preserveLastUser: true,
-		});
-		out = result.messages;
-		folded = true;
-	}
+	// Extract (query-aware, big pastes) then fold (query-blind, the rest).
+	const stage = extractThenFold(working, {
+		foldGate: FOLD_GATE,
+		foldMaxTokens: FOLD_MAX_TOKENS,
+	});
+	const { extracted, folded } = stage;
+	let out = stage.messages;
 
 	const postFold = out.reduce((s, m) => s + countTokens(m.content), 0);
 	if (postFold > SHARD_GATE) {
@@ -162,7 +161,7 @@ export function optimize(messages: ChatMessage[]): {
 		sharded = true;
 	}
 
-	return { messages: out, folded, sharded };
+	return { messages: out, folded, sharded, extracted };
 }
 
 /**
@@ -234,7 +233,7 @@ export function createChatSession(opts: ChatSessionOptions): ChatSession {
 			}
 
 			const pending: ChatMessage[] = [...history, { role: "user", content: userText }];
-			const { messages, folded, sharded } = optimize(pending);
+			const { messages, folded, sharded, extracted } = optimize(pending);
 
 			const sentTokens = messages.reduce((s, m) => s + countTokens(m.content), 0);
 			const inputTokens = pending.reduce((s, m) => s + countTokens(m.content), 0);
@@ -281,6 +280,7 @@ export function createChatSession(opts: ChatSessionOptions): ChatSession {
 				outputTokens,
 				folded,
 				sharded,
+				extracted,
 				provider: providerFromModel(final?.model ?? model),
 				servedModel: final?.model ?? model,
 				latencyMs,
@@ -301,8 +301,8 @@ export function summarizeTurn(m: TurnMetrics): string {
 		`${m.servedModel}`,
 		`${m.sentTokens}\u2192${m.outputTokens} tok`,
 	];
-	if (m.folded || m.sharded) {
-		const stages = [m.folded ? "fold" : "", m.sharded ? "shard" : ""]
+	if (m.folded || m.sharded || m.extracted) {
+		const stages = [m.extracted ? "extract" : "", m.folded ? "fold" : "", m.sharded ? "shard" : ""]
 			.filter(Boolean)
 			.join("+");
 		parts.push(`${stages} \u2212${savedPct}%`);

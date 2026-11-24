@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Query-aware extraction + live benchmark
+
+- **New stage: query-aware extraction for large pastes** (`src/core/query-extractor.ts`).
+  Pasted logs, JSON, source files and documents over ~800 tokens are cut to the
+  parts the final question is about (BM25 + exact identifier hits + a generic
+  severity/rarity prior), kept in original order with explicit
+  `[… N lines omitted …]` markers. It runs before folding and extracted text is
+  not folded again (`src/core/context-stage.ts`, shared by the chat session and
+  both orchestrator paths). Offline benchmark: fact retention on pasted logs/JSON
+  /docs went from 0–33% to 100%, p95 overhead from ~270 ms to ~7 ms, tokens
+  saved ~80%. Known limit: it is lexical, so pure paraphrase and "which is the
+  largest?" questions are at chance (shown as adversarial rows in the benchmark).
+- **`bun run bench:live`** — sends each scenario raw and optimized to an
+  OpenRouter model, scores the answers, records provider-counted prompt tokens.
+  Retries rate limits, ignores calls that never succeeded.
+- Benchmark corpus now has 10 scenarios x 5 seeded variants (needle position
+  varies), and adversarial cases are reported separately. Found and fixed two
+  corpus leaks that made a case pass by luck.
+- The built-in token estimator runs ~40% low on log-like text (9,881 real vs
+  6,053 estimated); ratios are reliable, absolute counts are not.
+
 ### Benchmark + fold safety
 
 - **`guardian bench` / `bun run bench:harness`** — offline benchmark of the real

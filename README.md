@@ -437,24 +437,48 @@ MODEL=google/gemma-4-e2b BASE_URL=http://127.0.0.1:1234/v1 \
   MAX_TOKENS=400 GUARDIAN_REASONING=none bun run bench:quality
 ```
 
-`bench:harness` results on the bundled corpus (token counts are the built-in
-estimate, ~±10% of a real tokenizer):
+`bench:harness` (offline) on the bundled corpus: 10 scenarios, 5 seeded variants
+each with the needle at different positions. Token counts use the built-in
+estimator, which runs ~40% low on log-like text (real provider counts are in
+`bench:live` below), so treat the *ratios* as the signal.
 
-| Scenario | Tokens saved | Facts kept (Guardian) | Facts kept (equal-budget sliding window) |
+| Scenario | Tokens saved | Facts kept | Equal-budget sliding window |
 |---|---|---|---|
-| Long debugging chat | 81% | 75% | 0% |
-| Contract Q&A | 85% | 100% | 0% |
-| Padded chat | 59% | 100% | 33% |
-| Pasted service log | 79% | **0%** | 0% |
-| Large JSON tool result | 77% | **33%** | 33% |
+| Long debugging chat | 78% | 100% | 25% |
+| Pasted service log | 98% | 100% | 0% |
+| Large JSON tool result | 76% | 100% | 47% |
+| Contract Q&A | 74% | 100% | 27% |
+| Question inside the paste | 80% | 100% | 20% |
+| Long source file | 90% | 100% | 0% |
+| Padded chat | 61% | 100% | 33% |
+| *Adversarial:* question shares no words with the answer | 75% | **~20%** (chance) | 0% |
+| *Adversarial:* "which was slowest?" (needs numeric comparison) | 99% | **0%** | 0% |
 
-Guardian removes ~76% of tokens on realistic inputs and keeps more facts than
-truncating to the same budget, but **on large pasted logs and JSON it can drop
-the exact line you ask about** (folding is query-blind). Overhead is ~1–10 ms on
-chat-sized prompts and ~100–300 ms p95 on 5k+ token blobs, so "sub-30ms" holds
-for typical conversations, not huge pastes. The earlier `bench:context-loss`
-corpus is under 250 tokens, below the fold/shard gates, so it does not exercise
-these paths.
+Large pastes go through a query-aware extraction stage before folding
+(`src/core/query-extractor.ts`): BM25 against your question, exact identifier
+hits, and a generic "unusual or severe line" prior, kept within a token budget
+with explicit `[… N lines omitted …]` markers. It is lexical, so it is blind to
+pure paraphrase and to questions that need comparing values, as the two
+adversarial rows show. Overhead is ~1–10 ms p95. The earlier
+`bench:context-loss` corpus is under 250 tokens, below the fold/shard gates, so
+it never exercised these paths.
+
+`bench:live` sends the same conversation raw and optimized to a real model
+(OpenRouter free models work, no cost) and scores the **answers**, using the
+provider's own prompt-token counts:
+
+```bash
+OPENROUTER_API_KEY=... bun run bench:live            # --verbose shows answers
+```
+
+First live run (one free model, ERNIE 5.5 Flash; 17 answer pairs over debug
+chat, log, JSON and contract scenarios): provider-counted prompt tokens fell
+**69–98%**, and no fact the question needed was lost: every difference between
+the raw and optimized answers was a fact the raw run volunteered without being
+asked. That is a small sample on one model, and the free tier's daily quota cut
+the run short, so rerun it on your own model (and with credits) before relying
+on it. `bench:live` also reports a "preserved" rate: of the facts the model
+stated from the raw prompt, the share it still states from the optimized one.
 
 `bench:quality` reports `worstDeltaRecall` (must stay ≥ −5pp) and
 `meanAnswerF1`. Absolute recall depends on the local model's own
